@@ -36,7 +36,7 @@ struct FetchPageTool: ToolImplementation {
 				]),
 				"limit": .object([
 					"type": "integer",
-					"description": "Maximum number of characters to return (default: 50000)"
+					"description": "Maximum number of characters to return (default: 10000)"
 				]),
 				"includeMetadata": .object([
 					"type": "boolean",
@@ -68,7 +68,7 @@ struct FetchPageTool: ToolImplementation {
 		
 		self.url = url
 		self.offset = arguments.integers.offset ?? 0
-		self.limit = arguments.integers.limit ?? 50000
+		self.limit = arguments.integers.limit ?? 10000
 		self.includeMetadata = arguments.bools.includeMetadata ?? true
 		
 		// Validate offset
