@@ -6,11 +6,8 @@ import Foundation
 enum ServerHandlers {
 	private static let logger = Logger(label: "com.webreader.mcp-handlers")
 
-	/// Registered tool implementations
-	private static let toolImplementations: [any ToolImplementation.Type] = [
-		EchoTool.self,
-		GetTimestampTool.self,
-	]
+	/// Registered tool implementations from the central registry
+	private static let toolImplementations = ToolRegistry.registeredTools
 
 	/// Register all handlers on the given server
 	static func registerHandlers(on server: Server) async {
@@ -26,7 +23,7 @@ enum ServerHandlers {
 		await server.withMethodHandler(ListTools.self) { _ in
 			logger.debug("Listing tools")
 
-			let tools = toolImplementations.map { $0.tool }
+			let tools = toolImplementations.values.map { $0.tool }
 
 			return .init(tools: tools, nextCursor: nil)
 		}
@@ -36,8 +33,9 @@ enum ServerHandlers {
 			logger.debug("Calling tool", metadata: ["tool": "\(params.name)"])
 
 			do throws(ContentError) {
-				// Find the matching tool implementation
-				guard let toolType = toolImplementations.first(where: { $0.command.rawValue == params.name }) else {
+				// Find the matching tool implementation via dictionary lookup (O(1))
+				let command = ToolCommand(rawValue: params.name)
+				guard let toolType = toolImplementations[command] else {
 					throw .contentError(message: "Unknown tool '\(params.name)'")
 				}
 
