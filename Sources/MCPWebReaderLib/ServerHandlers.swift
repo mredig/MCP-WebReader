@@ -6,6 +6,12 @@ import Foundation
 enum ServerHandlers {
 	private static let logger = Logger(label: "com.webreader.mcp-handlers")
 
+	/// Registered tool implementations
+	private static let toolImplementations: [any ToolImplementation.Type] = [
+		EchoTool.self,
+		GetTimestampTool.self,
+	]
+
 	/// Register all handlers on the given server
 	static func registerHandlers(on server: Server) async {
 		await registerToolHandlers(on: server)
@@ -13,7 +19,6 @@ enum ServerHandlers {
 		await registerLifecycleHandlers(on: server)
 	}
 
-	// MARK: - Tool Handlers</parameter>
 	// MARK: - Tool Handlers
 
 	private static func registerToolHandlers(on server: Server) async {
@@ -21,30 +26,7 @@ enum ServerHandlers {
 		await server.withMethodHandler(ListTools.self) { _ in
 			logger.debug("Listing tools")
 
-			let tools = [
-				Tool(
-					name: ToolCommands.echo.rawValue,
-					description: "Echoes back the provided message",
-					inputSchema: .object([
-						"type": "object",
-						"properties": .object([
-							"message": .object([
-								"type": "string",
-								"description": "The message to echo back"
-							])
-						]),
-						"required": .array([.string("message")])
-					])
-				),
-				Tool(
-					name: ToolCommands.getTimestamp.rawValue,
-					description: "Returns the current timestamp in ISO 8601 format",
-					inputSchema: .object([
-						"type": "object",
-						"properties": .object([:])
-					])
-				)
-			]
+			let tools = toolImplementations.map { $0.tool }
 
 			return .init(tools: tools, nextCursor: nil)
 		}
@@ -54,33 +36,14 @@ enum ServerHandlers {
 			logger.debug("Calling tool", metadata: ["tool": "\(params.name)"])
 
 			do throws(ContentError) {
-				guard let command = ToolCommands(rawValue: params.name) else {
-					throw .contentError(message: "Unknown tool")
+				// Find the matching tool implementation
+				guard let toolType = toolImplementations.first(where: { $0.command.rawValue == params.name }) else {
+					throw .contentError(message: "Unknown tool '\(params.name)'")
 				}
 
-				switch command {
-				case .echo:
-					guard let message = params.strings.message else {
-						throw .contentError(message: "Missing 'message' parameter")
-					}
-					
-					let output = StructuredContentOutput(
-						inputRequest: "echo: \(message)",
-						metaData: nil,
-						content: [["echo": message]])
-					
-					return output.toResult()
-
-				case .getTimestamp:
-					let timestamp = ISO8601DateFormatter().string(from: Date())
-					
-					let output = StructuredContentOutput(
-						inputRequest: "get-timestamp",
-						metaData: nil,
-						content: [["timestamp": timestamp]])
-					
-					return output.toResult()
-				}
+				// Create instance and execute
+				let toolInstance = toolType.init(arguments: params)
+				return try await toolInstance()
 			} catch {
 				switch error {
 				case .contentError(message: let message):
@@ -91,53 +54,6 @@ enum ServerHandlers {
 				}
 			}
 		}
-	}
-
-	// MARK: - Output Structure
-
-	private struct StructuredContentOutput<Content: Codable & Sendable>: Codable, Sendable {
-		let inputRequest: String
-		let metaData: Metadata?
-		let content: [Content]
-
-		struct Metadata: Codable, Sendable {
-			let summary: String?
-			let resultCount: Int?
-
-			init(summary: String? = nil, resultCount: Int? = nil) {
-				self.summary = summary
-				self.resultCount = resultCount
-			}
-		}
-
-		func toResult() -> CallTool.Result {
-			var accumulator: [Tool.Content] = []
-
-			if let metaData {
-				let jsonString = try? Self.encodeToJSONString(metaData)
-				jsonString.map { accumulator.append(.text($0)) }
-			}
-
-			for item in content {
-				let jsonString = try? Self.encodeToJSONString(item)
-				jsonString.map { accumulator.append(.text($0)) }
-			}
-
-			return .init(content: accumulator, isError: false)
-		}
-
-		private static func encodeToJSONString<E: Encodable>(_ encodable: E) throws -> String {
-			let encoder = JSONEncoder()
-			encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-			encoder.dateEncodingStrategy = .iso8601
-			let data = try encoder.encode(encodable)
-			return String(decoding: data, as: UTF8.self)
-		}
-	}
-
-	enum ContentError: Error {
-		case contentError(message: String?)
-		case other(Error)
 	}
 
 	// MARK: - Resource Handlers
