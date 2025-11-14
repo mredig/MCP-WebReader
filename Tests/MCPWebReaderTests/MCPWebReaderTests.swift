@@ -34,7 +34,9 @@ final class MCPWebReaderTests: XCTestCase {
         XCTAssertEqual(content.count, 1, "Should return one content item")
         
         if case .text(let text) = content.first {
-            XCTAssertEqual(text, "Echo: Hello, World!")
+            // Verify it's valid JSON with the echo field
+            XCTAssertTrue(text.contains("\"echo\""), "Should contain echo field")
+            XCTAssertTrue(text.contains("Hello, World!"), "Should contain the echoed message")
         } else {
             XCTFail("Expected text content")
         }
@@ -61,15 +63,17 @@ final class MCPWebReaderTests: XCTestCase {
         XCTAssertEqual(content.count, 1, "Should return one content item")
         
         if case .text(let text) = content.first {
-            // Verify it contains a timestamp
-            XCTAssertTrue(text.contains("Current timestamp:"), "Should contain timestamp prefix")
+            // Verify it's valid JSON with the timestamp field
+            XCTAssertTrue(text.contains("\"timestamp\""), "Should contain timestamp field")
             
-            // Extract and validate the ISO 8601 timestamp
-            let components = text.components(separatedBy: "Current timestamp: ")
-            if components.count > 1 {
-                let timestampString = components[1]
+            // Extract and validate the ISO 8601 timestamp from JSON
+            if let data = text.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+               let timestampString = json["timestamp"] {
                 let formatter = ISO8601DateFormatter()
                 XCTAssertNotNil(formatter.date(from: timestampString), "Should be valid ISO 8601 timestamp")
+            } else {
+                XCTFail("Should be valid JSON with timestamp field")
             }
         } else {
             XCTFail("Expected text content")

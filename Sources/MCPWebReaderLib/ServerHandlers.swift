@@ -52,33 +52,90 @@ enum ServerHandlers {
 		await server.withMethodHandler(CallTool.self) { params in
 			logger.debug("Calling tool", metadata: ["tool": "\(params.name)"])
 
-			switch params.name {
-			case "echo":
-				guard let message = params.strings.message else {
-					return .init(
-						content: [.text("Error: Missing 'message' parameter")],
-						isError: true
-					)
+			do throws(ContentError) {
+				switch params.name {
+				case "echo":
+					guard let message = params.strings.message else {
+						throw .contentError(message: "Missing 'message' parameter")
+					}
+					
+					let output = StructuredContentOutput(
+						inputRequest: "echo: \(message)",
+						metaData: nil,
+						content: [["echo": message]])
+					
+					return output.toResult()
+
+				case "get-timestamp":
+					let timestamp = ISO8601DateFormatter().string(from: Date())
+					
+					let output = StructuredContentOutput(
+						inputRequest: "get-timestamp",
+						metaData: nil,
+						content: [["timestamp": timestamp]])
+					
+					return output.toResult()
+
+				default:
+					throw .contentError(message: "Unknown tool '\(params.name)'")
 				}
-				return .init(
-					content: [.text("Echo: \(message)")],
-					isError: false
-				)
-
-			case "get-timestamp":
-				let timestamp = ISO8601DateFormatter().string(from: Date())
-				return .init(
-					content: [.text("Current timestamp: \(timestamp)")],
-					isError: false
-				)
-
-			default:
-				return .init(
-					content: [.text("Error: Unknown tool '\(params.name)'")],
-					isError: true
-				)
+			} catch {
+				switch error {
+				case .contentError(message: let message):
+					let errorMessage = "Error performing \(params.name): \(message ?? "Content Error")"
+					return .init(content: [.text(errorMessage)], isError: true)
+				case .other(let error):
+					return .init(content: [.text("Error performing \(params.name): \(error)")], isError: true)
+				}
 			}
 		}
+	}
+
+	// MARK: - Output Structure
+
+	private struct StructuredContentOutput<Content: Codable & Sendable>: Codable, Sendable {
+		let inputRequest: String
+		let metaData: Metadata?
+		let content: [Content]
+
+		struct Metadata: Codable, Sendable {
+			let summary: String?
+			let resultCount: Int?
+
+			init(summary: String? = nil, resultCount: Int? = nil) {
+				self.summary = summary
+				self.resultCount = resultCount
+			}
+		}
+
+		func toResult() -> CallTool.Result {
+			var accumulator: [Tool.Content] = []
+
+			if let metaData {
+				let jsonString = try? Self.encodeToJSONString(metaData)
+				jsonString.map { accumulator.append(.text($0)) }
+			}
+
+			for item in content {
+				let jsonString = try? Self.encodeToJSONString(item)
+				jsonString.map { accumulator.append(.text($0)) }
+			}
+
+			return .init(content: accumulator, isError: false)
+		}
+
+		private static func encodeToJSONString<E: Encodable>(_ encodable: E) throws -> String {
+			let encoder = JSONEncoder()
+			encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+			encoder.dateEncodingStrategy = .iso8601
+			let data = try encoder.encode(encodable)
+			return String(decoding: data, as: UTF8.self)
+		}
+	}
+
+	enum ContentError: Error {
+		case contentError(message: String?)
+		case other(Error)
 	}
 
 	// MARK: - Resource Handlers
