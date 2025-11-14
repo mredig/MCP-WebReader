@@ -1,0 +1,201 @@
+import MCP
+import Logging
+import Foundation
+
+/// ServerHandlers contains all MCP request handlers for tools, resources, and prompts
+enum ServerHandlers {
+	private static let logger = Logger(label: "com.webreader.mcp-handlers")
+
+	/// Register all handlers on the given server
+	static func registerHandlers(on server: Server) async {
+		await registerToolHandlers(on: server)
+		await registerResourceHandlers(on: server)
+		await registerLifecycleHandlers(on: server)
+	}
+
+	// MARK: - Tool Handlers
+
+	private static func registerToolHandlers(on server: Server) async {
+		// List available tools
+		await server.withMethodHandler(ListTools.self) { _ in
+			logger.debug("Listing tools")
+
+			let tools = [
+				Tool(
+					name: "echo",
+					description: "Echoes back the provided message",
+					inputSchema: .object([
+						"type": "object",
+						"properties": .object([
+							"message": .object([
+								"type": "string",
+								"description": "The message to echo back"
+							])
+						]),
+						"required": .array([.string("message")])
+					])
+				),
+				Tool(
+					name: "get-timestamp",
+					description: "Returns the current timestamp in ISO 8601 format",
+					inputSchema: .object([
+						"type": "object",
+						"properties": .object([:])
+					])
+				)
+			]
+
+			return .init(tools: tools, nextCursor: nil)
+		}
+
+		// Handle tool calls
+		await server.withMethodHandler(CallTool.self) { params in
+			logger.debug("Calling tool", metadata: ["tool": "\(params.name)"])
+
+			switch params.name {
+			case "echo":
+				guard let message = params.strings.message else {
+					return .init(
+						content: [.text("Error: Missing 'message' parameter")],
+						isError: true
+					)
+				}
+				return .init(
+					content: [.text("Echo: \(message)")],
+					isError: false
+				)
+
+			case "get-timestamp":
+				let timestamp = ISO8601DateFormatter().string(from: Date())
+				return .init(
+					content: [.text("Current timestamp: \(timestamp)")],
+					isError: false
+				)
+
+			default:
+				return .init(
+					content: [.text("Error: Unknown tool '\(params.name)'")],
+					isError: true
+				)
+			}
+		}
+	}
+
+	// MARK: - Resource Handlers
+
+	private static func registerResourceHandlers(on server: Server) async {
+		// List available resources
+		await server.withMethodHandler(ListResources.self) { _ in
+			logger.debug("Listing resources")
+
+			let resources = [
+				Resource(
+					name: "Server Status",
+					uri: "webreader://status",
+					description: "Current server status and statistics",
+					mimeType: "application/json"
+				),
+				Resource(
+					name: "Welcome Message",
+					uri: "webreader://welcome",
+					description: "Welcome message and server information",
+					mimeType: "text/plain"
+				),
+				Resource(
+					name: "Server Configuration",
+					uri: "webreader://config",
+					description: "Server configuration details",
+					mimeType: "application/json"
+				)
+			]
+
+			return .init(resources: resources, nextCursor: nil)
+		}
+
+		// Handle resource reads
+		await server.withMethodHandler(ReadResource.self) { params in
+			logger.debug("Reading resource", metadata: ["uri": "\(params.uri)"])
+
+			switch params.uri {
+			case "webreader://status":
+				let statusJson = """
+				{
+					"status": "healthy",
+					"uptime": "running",
+					"version": "1.0.0",
+					"timestamp": "\(ISO8601DateFormatter().string(from: Date()))"
+				}
+				"""
+				return .init(contents: [
+					.text(statusJson, uri: params.uri, mimeType: "application/json")
+				])
+
+			case "webreader://welcome":
+				let welcome = """
+				Welcome to MCP WebReader Server!
+
+				This is a Model Context Protocol server built with Swift.
+				It provides tools, resources, and prompts for AI interaction.
+
+				Version: 1.0.0
+				"""
+				return .init(contents: [
+					.text(welcome, uri: params.uri, mimeType: "text/plain")
+				])
+
+			case "webreader://config":
+				let configJson = """
+				{
+					"name": "MCP-WebReader",
+					"version": "1.0.0",
+					"capabilities": {
+						"tools": true,
+						"resources": true,
+						"prompts": false,
+						"sampling": false
+					},
+					"transport": "stdio"
+				}
+				"""
+				return .init(contents: [
+					.text(configJson, uri: params.uri, mimeType: "application/json")
+				])
+
+			default:
+				throw MCPError.invalidParams("Unknown resource URI: \(params.uri)")
+			}
+		}
+
+		// Handle resource subscriptions
+		await server.withMethodHandler(ResourceSubscribe.self) { params in
+			logger.info("Client subscribed to resource", metadata: ["uri": "\(params.uri)"])
+
+			// In a real implementation, you would:
+			// 1. Store the subscription for this client
+			// 2. Send notifications when the resource changes
+			// 3. Use server.sendNotification(...) to push updates
+
+			return .init()
+		}
+	}
+
+	// MARK: - Lifecycle Handlers
+
+	private static func registerLifecycleHandlers(on server: Server) async {
+		// Handle shutdown request
+		await server.withMethodHandler(Shutdown.self) { [weak server] _ in
+			logger.info("Shutdown request received - preparing to exit")
+			Task {
+				guard let server else {
+					throw NSError(domain: "com.webreader.mcp-server", code: 1)
+				}
+				try await Task.sleep(for: .milliseconds(100))
+				logger.info("Calling server.stop()")
+				await server.stop()
+				logger.info("Server stopped, calling _exit")
+				_exit(0)
+			}
+			return .init()
+		}
+	}
+}

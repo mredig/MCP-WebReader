@@ -1,0 +1,196 @@
+import XCTest
+import MCP
+import Logging
+@testable import MCPWebReaderLib
+
+final class MCPWebReaderTests: XCTestCase {
+    var logger: Logger!
+    
+    override func setUp() async throws {
+        logger = Logger(label: "com.webreader.tests")
+        logger.logLevel = .debug
+    }
+    
+    // MARK: - Tool Tests
+    
+    func testEchoTool() async throws {
+        let server = createTestServer()
+        await ServerHandlers.registerHandlers(on: server)
+        
+        let (serverTransport, clientTransport) = await InMemoryTransport.createConnectedPair()
+        try await server.start(transport: serverTransport)
+        
+        // Create a client and connect
+        let client = Client(name: "TestClient", version: "1.0.0")
+        try await client.connect(transport: clientTransport)
+        
+        // Test echo tool
+        let (content, isError) = try await client.callTool(
+            name: "echo",
+            arguments: ["message": "Hello, World!"]
+        )
+        
+        XCTAssertFalse(isError ?? false, "Echo tool should not return an error")
+        XCTAssertEqual(content.count, 1, "Should return one content item")
+        
+        if case .text(let text) = content.first {
+            XCTAssertEqual(text, "Echo: Hello, World!")
+        } else {
+            XCTFail("Expected text content")
+        }
+        
+        await server.stop()
+    }
+    
+    func testGetTimestampTool() async throws {
+        let server = createTestServer()
+        await ServerHandlers.registerHandlers(on: server)
+        
+        let (serverTransport, clientTransport) = await InMemoryTransport.createConnectedPair()
+        try await server.start(transport: serverTransport)
+        
+        let client = Client(name: "TestClient", version: "1.0.0")
+        try await client.connect(transport: clientTransport)
+        
+        let (content, isError) = try await client.callTool(
+            name: "get-timestamp",
+            arguments: [:]
+        )
+        
+        XCTAssertFalse(isError ?? false, "Timestamp tool should not return an error")
+        XCTAssertEqual(content.count, 1, "Should return one content item")
+        
+        if case .text(let text) = content.first {
+            // Verify it contains a timestamp
+            XCTAssertTrue(text.contains("Current timestamp:"), "Should contain timestamp prefix")
+            
+            // Extract and validate the ISO 8601 timestamp
+            let components = text.components(separatedBy: "Current timestamp: ")
+            if components.count > 1 {
+                let timestampString = components[1]
+                let formatter = ISO8601DateFormatter()
+                XCTAssertNotNil(formatter.date(from: timestampString), "Should be valid ISO 8601 timestamp")
+            }
+        } else {
+            XCTFail("Expected text content")
+        }
+        
+        await server.stop()
+    }
+    
+    // MARK: - Resource Tests
+    
+    func testListResources() async throws {
+        let server = createTestServer()
+        await ServerHandlers.registerHandlers(on: server)
+        
+        let (serverTransport, clientTransport) = await InMemoryTransport.createConnectedPair()
+        try await server.start(transport: serverTransport)
+        
+        let client = Client(name: "TestClient", version: "1.0.0")
+        try await client.connect(transport: clientTransport)
+        
+        let (resources, _) = try await client.listResources()
+        
+        XCTAssertGreaterThan(resources.count, 0, "Should have resources available")
+        
+        let uris = resources.map { $0.uri }
+        XCTAssertTrue(uris.contains("webreader://status"), "Should have status resource")
+        XCTAssertTrue(uris.contains("webreader://welcome"), "Should have welcome resource")
+        XCTAssertTrue(uris.contains("webreader://config"), "Should have config resource")
+        
+        await server.stop()
+    }
+    
+    func testReadStatusResource() async throws {
+        let server = createTestServer()
+        await ServerHandlers.registerHandlers(on: server)
+
+        let (serverTransport, clientTransport) = await InMemoryTransport.createConnectedPair()
+        try await server.start(transport: serverTransport)
+
+        let client = Client(name: "TestClient", version: "1.0.0")
+        try await client.connect(transport: clientTransport)
+        
+        // Test reading status resource
+        let statusContents = try await client.readResource(uri: "webreader://status")
+        XCTAssertEqual(statusContents.count, 1, "Should have one content item")
+
+        if let firstStatusContent = statusContents.first, let text = firstStatusContent.text {
+            let mimeType = firstStatusContent.mimeType
+
+            XCTAssertEqual(mimeType, "application/json")
+            XCTAssertTrue(text.contains("status"), "Status should contain 'status' field")
+            XCTAssertTrue(text.contains("version"), "Status should contain 'version' field")
+        } else {
+            XCTFail("Expected text content")
+        }
+        
+        await server.stop()
+    }
+    
+    func testReadWelcomeResource() async throws {
+        let server = createTestServer()
+        await ServerHandlers.registerHandlers(on: server)
+
+        let (serverTransport, clientTransport) = await InMemoryTransport.createConnectedPair()
+        try await server.start(transport: serverTransport)
+
+        let client = Client(name: "TestClient", version: "1.0.0")
+        try await client.connect(transport: clientTransport)
+        
+        // Test reading welcome resource
+        let welcomeContents = try await client.readResource(uri: "webreader://welcome")
+        XCTAssertEqual(welcomeContents.count, 1, "Should have one content item")
+
+        if let firstWelcome = welcomeContents.first, let text = firstWelcome.text {
+            let mimeType = firstWelcome.mimeType
+            XCTAssertEqual(mimeType, "text/plain")
+            XCTAssertTrue(text.contains("Welcome"), "Welcome should contain greeting")
+            XCTAssertTrue(text.contains("MCP WebReader"), "Welcome should mention server name")
+        } else {
+            XCTFail("Expected text content")
+        }
+        
+        await server.stop()
+    }
+    
+    func testReadConfigResource() async throws {
+        let server = createTestServer()
+        await ServerHandlers.registerHandlers(on: server)
+
+        let (serverTransport, clientTransport) = await InMemoryTransport.createConnectedPair()
+        try await server.start(transport: serverTransport)
+
+        let client = Client(name: "TestClient", version: "1.0.0")
+        try await client.connect(transport: clientTransport)
+        
+        // Test reading config resource
+        let configContents = try await client.readResource(uri: "webreader://config")
+        XCTAssertEqual(configContents.count, 1, "Should have one content item")
+
+        if let firstConfig = configContents.first, let text = firstConfig.text {
+            let mimeType = firstConfig.mimeType
+            XCTAssertEqual(mimeType, "application/json")
+            XCTAssertTrue(text.contains("MCP-WebReader"), "Config should contain server name")
+            XCTAssertTrue(text.contains("capabilities"), "Config should contain capabilities")
+        } else {
+            XCTFail("Expected text content")
+        }
+        
+        await server.stop()
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func createTestServer() -> Server {
+        return Server(
+            name: "TestServer",
+            version: "1.0.0",
+            capabilities: .init(
+                resources: .init(subscribe: true, listChanged: true),
+                tools: .init(listChanged: true)
+            )
+        )
+    }
+}

@@ -1,0 +1,9 @@
+{
+	"mcpServers": {
+		"webreader": {
+			"command": "/path/to/MCP-WebReader/.build/debug/mcp-webreader",
+			"args": [],
+			"env": {}
+		}
+	}
+}
