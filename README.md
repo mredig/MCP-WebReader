@@ -1,6 +1,6 @@
 # MCP-WebReader
 
-A minimal, well-structured Swift MCP (Model Context Protocol) server template.
+A Swift MCP (Model Context Protocol) server for fetching and parsing web content.
 
 ## TLDR - Quick Start
 
@@ -185,9 +185,37 @@ throw .other(someError)
 swift test
 ```
 
-## Included Examples
+## Available Tools
 
-### Tools
+### Web Content Tools
+
+#### `fetch-page`
+Fetches web page content using URLSession (no JavaScript rendering). Returns cleaned text with HTML tags stripped.
+
+**Parameters:**
+- `url` (required, string) - The URL to fetch (must be http:// or https://)
+- `offset` (optional, integer) - Starting character position for pagination (default: 0)
+- `limit` (optional, integer) - Maximum number of characters to return (default: 50000)
+- `includeMetadata` (optional, boolean) - Include page metadata like title and description (default: true)
+
+**Returns:**
+```json
+{
+  "text": "Page content here...",
+  "title": "Page Title",
+  "description": "Meta description if available",
+  "url": "https://example.com",
+  "contentLength": 12345,
+  "returnedLength": 500,
+  "offset": 0,
+  "hasMore": true,
+  "nextOffset": 500
+}
+```
+
+**Note:** This tool does not execute JavaScript. For pages that require JavaScript rendering, use `render-page` instead (coming soon).
+
+### Example Tools
 - `echo` - Echoes a message back (demonstrates parameter handling)
 - `get-timestamp` - Returns current ISO 8601 timestamp (demonstrates no-parameter tools)
 
@@ -195,6 +223,30 @@ swift test
 - `webreader://status` - Server status (JSON)
 - `webreader://welcome` - Welcome message (text)
 - `webreader://config` - Server configuration (JSON)
+
+## Usage Examples
+
+### Fetch a webpage
+```json
+{
+  "tool": "fetch-page",
+  "arguments": {
+    "url": "https://example.com"
+  }
+}
+```
+
+### Fetch with pagination
+```json
+{
+  "tool": "fetch-page",
+  "arguments": {
+    "url": "https://example.com",
+    "offset": 500,
+    "limit": 1000
+  }
+}
+```
 
 ## Resources
 

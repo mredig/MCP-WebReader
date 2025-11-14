@@ -122,3 +122,7 @@ DerivedData
 
 # MCP specific
 mcp-server.log
+
+# Code coverage
+*.profraw
+*.profdata

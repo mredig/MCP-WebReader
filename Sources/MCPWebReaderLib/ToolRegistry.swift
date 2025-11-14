@@ -15,6 +15,7 @@ enum ToolRegistry {
 	static let registeredTools: [ToolCommand: any ToolImplementation.Type] = [
 		.echo: EchoTool.self,
 		.getTimestamp: GetTimestampTool.self,
+		.fetchPage: FetchPageTool.self,
 		// Add your custom tools here:
 		// .myTool: MyTool.self,
 	]

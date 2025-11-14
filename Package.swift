@@ -27,6 +27,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.6.2"),
 		.package(url: "https://github.com/mredig/SwiftPizzaSnips.git", from: "0.4.37"),
+		// HTML Parsing
+		.package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
     ],
     targets: [
 		.target(
@@ -36,6 +38,7 @@ let package = Package(
 				"SwiftPizzaSnips",
 				.product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
 				.product(name: "Logging", package: "swift-log"),
+				.product(name: "SwiftSoup", package: "SwiftSoup"),
 			],
 			swiftSettings: [
 				.enableUpcomingFeature("StrictConcurrency")

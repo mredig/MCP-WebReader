@@ -44,6 +44,54 @@ final class MCPWebReaderTests: XCTestCase {
         await server.stop()
     }
     
+    func testFetchPageTool() async throws {
+        let server = createTestServer()
+        await ServerHandlers.registerHandlers(on: server)
+        
+        let (serverTransport, clientTransport) = await InMemoryTransport.createConnectedPair()
+        try await server.start(transport: serverTransport)
+        
+        let client = Client(name: "TestClient", version: "1.0.0")
+        try await client.connect(transport: clientTransport)
+        
+        // Test fetch-page tool with example.com (a reliable test URL)
+        let (content, isError) = try await client.callTool(
+            name: "fetch-page",
+            arguments: [
+                "url": "https://example.com",
+                "limit": 500
+            ]
+        )
+        
+        XCTAssertFalse(isError ?? false, "Fetch-page tool should not return an error")
+        XCTAssertEqual(content.count, 1, "Should return one content item")
+        
+        if case .text(let text) = content.first {
+            // Verify it's valid JSON with expected fields
+            XCTAssertTrue(text.contains("\"text\""), "Should contain text field")
+            XCTAssertTrue(text.contains("\"url\""), "Should contain url field")
+            XCTAssertTrue(text.contains("\"contentLength\""), "Should contain contentLength field")
+            XCTAssertTrue(text.contains("example.com"), "Should contain the URL")
+            
+            // Parse JSON to validate structure
+            if let data = text.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                XCTAssertNotNil(json["text"], "Should have text field")
+                XCTAssertNotNil(json["url"], "Should have url field")
+                XCTAssertNotNil(json["contentLength"], "Should have contentLength field")
+                XCTAssertNotNil(json["returnedLength"], "Should have returnedLength field")
+                XCTAssertNotNil(json["offset"], "Should have offset field")
+                XCTAssertNotNil(json["hasMore"], "Should have hasMore field")
+            } else {
+                XCTFail("Should be valid JSON")
+            }
+        } else {
+            XCTFail("Expected text content")
+        }
+        
+        await server.stop()
+    }
+    
     func testGetTimestampTool() async throws {
         let server = createTestServer()
         await ServerHandlers.registerHandlers(on: server)
