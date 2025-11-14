@@ -13,6 +13,7 @@ enum ServerHandlers {
 		await registerLifecycleHandlers(on: server)
 	}
 
+	// MARK: - Tool Handlers</parameter>
 	// MARK: - Tool Handlers
 
 	private static func registerToolHandlers(on server: Server) async {
@@ -22,7 +23,7 @@ enum ServerHandlers {
 
 			let tools = [
 				Tool(
-					name: "echo",
+					name: ToolCommands.echo.rawValue,
 					description: "Echoes back the provided message",
 					inputSchema: .object([
 						"type": "object",
@@ -36,7 +37,7 @@ enum ServerHandlers {
 					])
 				),
 				Tool(
-					name: "get-timestamp",
+					name: ToolCommands.getTimestamp.rawValue,
 					description: "Returns the current timestamp in ISO 8601 format",
 					inputSchema: .object([
 						"type": "object",
@@ -53,8 +54,12 @@ enum ServerHandlers {
 			logger.debug("Calling tool", metadata: ["tool": "\(params.name)"])
 
 			do throws(ContentError) {
-				switch params.name {
-				case "echo":
+				guard let command = ToolCommands(rawValue: params.name) else {
+					throw .contentError(message: "Unknown tool")
+				}
+
+				switch command {
+				case .echo:
 					guard let message = params.strings.message else {
 						throw .contentError(message: "Missing 'message' parameter")
 					}
@@ -66,7 +71,7 @@ enum ServerHandlers {
 					
 					return output.toResult()
 
-				case "get-timestamp":
+				case .getTimestamp:
 					let timestamp = ISO8601DateFormatter().string(from: Date())
 					
 					let output = StructuredContentOutput(
@@ -75,9 +80,6 @@ enum ServerHandlers {
 						content: [["timestamp": timestamp]])
 					
 					return output.toResult()
-
-				default:
-					throw .contentError(message: "Unknown tool '\(params.name)'")
 				}
 			} catch {
 				switch error {
