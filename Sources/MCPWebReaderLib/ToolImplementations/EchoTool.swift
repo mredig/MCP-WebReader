@@ -23,17 +23,16 @@ struct EchoTool: ToolImplementation {
 		])
 	)
 	
-	let arguments: CallTool.Parameters
+	let message: String
 	
-	init(arguments: CallTool.Parameters) {
-		self.arguments = arguments
+	init(arguments: CallTool.Parameters) throws(ContentError) {
+		guard let message = arguments.strings.message else {
+			throw .missingArgument("message")
+		}
+		self.message = message
 	}
 	
 	func callAsFunction() async throws(ContentError) -> CallTool.Result {
-		guard let message = arguments.strings.message else {
-			throw ContentError.contentError(message: "Missing 'message' parameter")
-		}
-		
 		let output = StructuredContentOutput(
 			inputRequest: "echo: \(message)",
 			metaData: nil,

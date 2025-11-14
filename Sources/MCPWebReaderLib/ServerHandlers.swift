@@ -42,16 +42,23 @@ enum ServerHandlers {
 				}
 
 				// Create instance and execute
-				let toolInstance = toolType.init(arguments: params)
+				let toolInstance = try toolType.init(arguments: params)
 				return try await toolInstance()
 			} catch {
+				let errorMessage: String
 				switch error {
+				case .missingArgument(let arg):
+					errorMessage = "Missing required argument: '\(arg)'"
+				case .mismatchedType(let arg, let expected):
+					errorMessage = "Argument '\(arg)' has incorrect type (expected: \(expected))"
+				case .initializationFailed(let message):
+					errorMessage = "Initialization failed: \(message)"
 				case .contentError(message: let message):
-					let errorMessage = "Error performing \(params.name): \(message ?? "Content Error")"
-					return .init(content: [.text(errorMessage)], isError: true)
+					errorMessage = "Error performing \(params.name): \(message ?? "Content Error")"
 				case .other(let error):
-					return .init(content: [.text("Error performing \(params.name): \(error)")], isError: true)
+					errorMessage = "Error performing \(params.name): \(error)"
 				}
+				return .init(content: [.text(errorMessage)], isError: true)
 			}
 		}
 	}

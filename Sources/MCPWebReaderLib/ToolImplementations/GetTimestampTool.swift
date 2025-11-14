@@ -17,10 +17,8 @@ struct GetTimestampTool: ToolImplementation {
 		])
 	)
 	
-	let arguments: CallTool.Parameters
-	
-	init(arguments: CallTool.Parameters) {
-		self.arguments = arguments
+	init(arguments: CallTool.Parameters) throws(ContentError) {
+		// No parameters needed for this tool
 	}
 	
 	func callAsFunction() async throws(ContentError) -> CallTool.Result {

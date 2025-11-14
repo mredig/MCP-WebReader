@@ -46,6 +46,9 @@ struct StructuredContentOutput<Content: Codable & Sendable>: Codable, Sendable {
 // MARK: - Content Error
 
 enum ContentError: Error {
+	case missingArgument(String)
+	case mismatchedType(argument: String, expected: String)
+	case initializationFailed(String)
 	case contentError(message: String?)
 	case other(Error)
 }

@@ -9,11 +9,8 @@ protocol ToolImplementation: Sendable {
 	/// The MCP Tool definition
 	static var tool: Tool { get }
 	
-	/// Arguments passed to the tool
-	var arguments: CallTool.Parameters { get }
-	
-	/// Initialize with tool arguments
-	init(arguments: CallTool.Parameters)
+	/// Initialize with tool arguments, extracting and validating required parameters
+	init(arguments: CallTool.Parameters) throws(ContentError)
 	
 	/// Execute the tool and return structured output
 	func callAsFunction() async throws(ContentError) -> CallTool.Result
