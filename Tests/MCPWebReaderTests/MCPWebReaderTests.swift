@@ -92,6 +92,64 @@ final class MCPWebReaderTests: XCTestCase {
         await server.stop()
     }
     
+    func testFetchPageToolWithSearch() async throws {
+        let server = createTestServer()
+        await ServerHandlers.registerHandlers(on: server)
+        
+        let (serverTransport, clientTransport) = await InMemoryTransport.createConnectedPair()
+        try await server.start(transport: serverTransport)
+        
+        let client = Client(name: "TestClient", version: "1.0.0")
+        try await client.connect(transport: clientTransport)
+        
+        // Test fetch-page tool with search query
+        let (content, isError) = try await client.callTool(
+            name: "fetch-page",
+            arguments: [
+                "url": "https://example.com",
+                "query": "example"
+            ]
+        )
+        
+        XCTAssertFalse(isError ?? false, "Fetch-page search should not return an error")
+        XCTAssertEqual(content.count, 1, "Should return one content item")
+        
+        if case .text(let text) = content.first {
+            // Verify it's valid JSON with expected search result fields
+            XCTAssertTrue(text.contains("\"query\""), "Should contain query field")
+            XCTAssertTrue(text.contains("\"matches\""), "Should contain matches field")
+            XCTAssertTrue(text.contains("\"totalMatches\""), "Should contain totalMatches field")
+            XCTAssertTrue(text.contains("\"webpageLength\""), "Should contain webpageLength field")
+            XCTAssertTrue(text.contains("example"), "Should contain the search query")
+            
+            // Parse JSON to validate structure
+            if let data = text.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                XCTAssertNotNil(json["query"], "Should have query field")
+                XCTAssertNotNil(json["matches"], "Should have matches field")
+                XCTAssertNotNil(json["totalMatches"], "Should have totalMatches field")
+                XCTAssertNotNil(json["webpageLength"], "Should have webpageLength field")
+                
+                // Verify matches array structure
+                if let matches = json["matches"] as? [[String: Any]], let firstMatch = matches.first {
+                    XCTAssertNotNil(firstMatch["position"], "Match should have position field")
+                    XCTAssertNotNil(firstMatch["context"], "Match should have context field")
+                }
+                
+                // Should find at least one match for "example" on example.com
+                if let totalMatches = json["totalMatches"] as? Int {
+                    XCTAssertGreaterThan(totalMatches, 0, "Should find at least one match for 'example'")
+                }
+            } else {
+                XCTFail("Should be valid JSON")
+            }
+        } else {
+            XCTFail("Expected text content")
+        }
+        
+        await server.stop()
+    }
+    
     func testGetTimestampTool() async throws {
         let server = createTestServer()
         await ServerHandlers.registerHandlers(on: server)

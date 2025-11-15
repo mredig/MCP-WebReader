@@ -190,15 +190,17 @@ swift test
 ### Web Content Tools
 
 #### `fetch-page`
-Fetches web page content using URLSession (no JavaScript rendering). Returns cleaned text with HTML tags stripped.
+Fetches web page content using URLSession (no JavaScript rendering). Can operate in two modes: **fetch mode** (returns paginated content) or **search mode** (finds and returns all matches with context).
 
 **Parameters:**
 - `url` (required, string) - The URL to fetch (must be http:// or https://)
-- `offset` (optional, integer) - Starting character position for pagination (default: 0)
-- `limit` (optional, integer) - Maximum number of characters to return (default: 50000)
+- `query` (optional, string) - Search query. When provided, searches entire webpage and returns match positions with context. When omitted, returns paginated content.
+- `offset` (optional, integer) - Starting character position for pagination (default: 0). **Ignored when `query` is provided.**
+- `limit` (optional, integer) - Maximum number of characters to return (default: 10000). **Ignored when `query` is provided.**
 - `includeMetadata` (optional, boolean) - Include page metadata like title and description (default: true)
 
-**Returns:**
+**Fetch Mode (no query):**
+Returns paginated content from the webpage.
 ```json
 {
   "text": "Page content here...",
@@ -210,6 +212,29 @@ Fetches web page content using URLSession (no JavaScript rendering). Returns cle
   "offset": 0,
   "hasMore": true,
   "nextOffset": 500
+}
+```
+
+**Search Mode (with query):**
+Searches the entire webpage and returns all matches with surrounding context.
+```json
+{
+  "query": "search term",
+  "matches": [
+    {
+      "position": 1234,
+      "context": "...text before search term text after..."
+    },
+    {
+      "position": 5678,
+      "context": "...another match context..."
+    }
+  ],
+  "totalMatches": 2,
+  "title": "Page Title",
+  "description": "Meta description if available",
+  "url": "https://example.com",
+  "webpageLength": 12345
 }
 ```
 
@@ -244,6 +269,30 @@ Fetches web page content using URLSession (no JavaScript rendering). Returns cle
     "url": "https://example.com",
     "offset": 500,
     "limit": 1000
+  }
+}
+```
+
+### Search within a webpage
+```json
+{
+  "tool": "fetch-page",
+  "arguments": {
+    "url": "https://example.com",
+    "query": "search term"
+  }
+}
+```
+
+### Fetch content around search results
+After searching, use the returned positions to fetch specific content ranges:
+```json
+{
+  "tool": "fetch-page",
+  "arguments": {
+    "url": "https://example.com",
+    "offset": 1200,
+    "limit": 500
   }
 }
 ```
