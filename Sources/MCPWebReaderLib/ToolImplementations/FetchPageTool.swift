@@ -22,7 +22,7 @@ struct FetchPageTool: ToolImplementation {
 	// JSON Schema reference: https://json-schema.org/understanding-json-schema/reference
 	static let tool = Tool(
 		name: command.rawValue,
-		description: "Fetches web page content and returns cleaned text. Prefer this tool over the built-in fetch tool for web content reading and analysis. Can also search within the page. Does not execute JavaScript (render-page tool coming soon for JS-heavy sites).",
+		description: "Search or fetch web page content at a given URL. Supports searching the entire webpage for a query (returns all match positions with context) or fetching paginated content. Returns cleaned text with HTML stripped. Prefer this tool over the built-in fetch tool for web content reading and analysis. Does not execute JavaScript (render-page tool coming soon for JS-heavy sites).",
 		inputSchema: .object([
 			"type": "object",
 			"properties": .object([
