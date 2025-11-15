@@ -98,6 +98,7 @@ struct FetchPageTool: ToolImplementation {
 	private struct StatsForward {
 		let startTime: Date
 		let networkFetchTime: Date
+		let parseTime: TimeInterval
 		let cacheHit: Bool
 		let cacheAge: TimeInterval?
 		let cacheTTL: TimeInterval?
@@ -127,7 +128,8 @@ struct FetchPageTool: ToolImplementation {
 			guard let html = String(data: data, encoding: .utf8) else {
 				throw ContentError.contentError(message: "Failed to decode HTML content")
 			}
-			
+
+			let parseTimeStart = Date()
 			// Parse HTML
 			let document = try SwiftSoup.parse(html)
 			
@@ -139,9 +141,12 @@ struct FetchPageTool: ToolImplementation {
 			let title: String? = includeMetadata ? (try? document.title()) : nil
 			let description: String? = includeMetadata ? (try? document.select("meta[name=description]").first()?.attr("content")) : nil
 
+			let parseTimeEnd = Date()
+
 			let statsForward = StatsForward(
 				startTime: startTime,
 				networkFetchTime: networkFetchTime,
+				parseTime: parseTimeEnd.timeIntervalSince(parseTimeStart),
 				cacheHit: cacheResponse.cacheHit,
 				cacheAge: cacheResponse.cacheAge,
 				cacheTTL: cacheResponse.cacheTTL)
@@ -252,6 +257,7 @@ struct FetchPageTool: ToolImplementation {
 			webpageLength: totalLength,
 			statistics: FetchStatistics(
 				retrievalTime: retrievalTime,
+				parsingTime: statsForward.parseTime,
 				cacheHit: statsForward.cacheHit,
 				cacheAge: statsForward.cacheAge,
 				cacheTTL: statsForward.cacheTTL,
@@ -310,6 +316,7 @@ struct FetchPageTool: ToolImplementation {
 			nextOffset: hasMore ? endOffset : nil,
 			statistics: FetchStatistics(
 				retrievalTime: retrievalTime,
+				parsingTime: statsForward.parseTime,
 				cacheHit: statsForward.cacheHit,
 				cacheAge: statsForward.cacheAge,
 				cacheTTL: statsForward.cacheTTL,
