@@ -56,6 +56,8 @@ struct FetchPageTool: ToolImplementation {
 	let query: String?
 	let offset: Int
 	let limit: Int
+	let ignoreCache: Bool
+
 	let includeMetadata: Bool
 
 	private let cache: WebPageCache
@@ -79,6 +81,7 @@ struct FetchPageTool: ToolImplementation {
 		self.query = arguments.strings.query
 		self.offset = arguments.integers.offset ?? 0
 		self.limit = arguments.integers.limit ?? 2500
+		self.ignoreCache = arguments.bools.ignoreCache ?? false
 		self.includeMetadata = arguments.bools.includeMetadata ?? true
 		
 		// Validate offset
@@ -91,12 +94,25 @@ struct FetchPageTool: ToolImplementation {
 			throw .contentError(message: "limit must be between 1 and 500000")
 		}
 	}
-	
+
+	private struct StatsForward {
+		let startTime: Date
+		let networkFetchTime: Date
+		let cacheHit: Bool
+		let cacheAge: TimeInterval?
+		let cacheTTL: TimeInterval?
+	}
+
 	/// Execute the tool
 	func callAsFunction() async throws(ContentError) -> CallTool.Result {
 		do {
+			let startTime = Date()
 			// Fetch the page (with caching)
-			let (data, response) = try await cache.fetch(url: url)
+			let cacheResponse = try await cache.fetch(url: url, ignoreCache: ignoreCache)
+			let data = cacheResponse.data
+			let response = cacheResponse.response
+
+			let networkFetchTime = Date()
 
 			// Validate HTTP response
 			guard let httpResponse = response as? HTTPURLResponse else {
@@ -122,7 +138,14 @@ struct FetchPageTool: ToolImplementation {
 			// Extract metadata if requested
 			let title: String? = includeMetadata ? (try? document.title()) : nil
 			let description: String? = includeMetadata ? (try? document.select("meta[name=description]").first()?.attr("content")) : nil
-			
+
+			let statsForward = StatsForward(
+				startTime: startTime,
+				networkFetchTime: networkFetchTime,
+				cacheHit: cacheResponse.cacheHit,
+				cacheAge: cacheResponse.cacheAge,
+				cacheTTL: cacheResponse.cacheTTL)
+
 			// Check if we're in search mode or fetch mode
 			if let searchQuery = query, !searchQuery.isEmpty {
 				// Search mode: find all occurrences and return match positions with context
@@ -131,18 +154,17 @@ struct FetchPageTool: ToolImplementation {
 					fullText: fullText,
 					title: title,
 					description: description,
-					totalLength: totalLength
-				)
+					totalLength: totalLength,
+					statsForward: statsForward)
 			} else {
 				// Fetch mode: return paginated content
 				return try performFetch(
 					fullText: fullText,
 					title: title,
 					description: description,
-					totalLength: totalLength
-				)
+					totalLength: totalLength,
+					statsForward: statsForward)
 			}
-			
 		} catch let error as ContentError {
 			throw error
 		} catch {
@@ -157,7 +179,8 @@ struct FetchPageTool: ToolImplementation {
 		fullText: String,
 		title: String?,
 		description: String?,
-		totalLength: Int
+		totalLength: Int,
+		statsForward: StatsForward
 	) throws(ContentError) -> CallTool.Result {
 		struct SearchMatch: Codable, Sendable {
 			let position: Int
@@ -172,8 +195,11 @@ struct FetchPageTool: ToolImplementation {
 			let description: String?
 			let url: String
 			let webpageLength: Int
+			let statistics: FetchStatistics
 		}
-		
+
+		let searchStart = Date()
+
 		var matches: [SearchMatch] = []
 		let contextRadius = 100 // Characters before/after match to include
 		
@@ -211,7 +237,11 @@ struct FetchPageTool: ToolImplementation {
 			// Move search range past this match
 			searchRange = range.upperBound..<lowercasedText.endIndex
 		}
-		
+
+		let searchEnd = Date()
+
+		let retrievalTime = searchEnd.timeIntervalSince(statsForward.networkFetchTime)
+
 		let searchResult = SearchResult(
 			query: query,
 			matches: matches,
@@ -219,9 +249,14 @@ struct FetchPageTool: ToolImplementation {
 			title: title,
 			description: description,
 			url: url.absoluteString,
-			webpageLength: totalLength
-		)
-		
+			webpageLength: totalLength,
+			statistics: FetchStatistics(
+				retrievalTime: retrievalTime,
+				cacheHit: statsForward.cacheHit,
+				cacheAge: statsForward.cacheAge,
+				cacheTTL: statsForward.cacheTTL,
+				searchTime: searchEnd.timeIntervalSince(searchStart)))
+
 		let output = StructuredContentOutput(
 			inputRequest: "fetch-page: \(url.absoluteString) (search: \"\(query)\")",
 			metaData: nil,
@@ -237,7 +272,8 @@ struct FetchPageTool: ToolImplementation {
 		fullText: String,
 		title: String?,
 		description: String?,
-		totalLength: Int
+		totalLength: Int,
+		statsForward: StatsForward
 	) throws(ContentError) -> CallTool.Result {
 		// Apply pagination
 		let startIndex = fullText.index(fullText.startIndex, offsetBy: min(offset, totalLength), limitedBy: fullText.endIndex) ?? fullText.endIndex
@@ -257,8 +293,11 @@ struct FetchPageTool: ToolImplementation {
 			let offset: Int
 			let hasMore: Bool
 			let nextOffset: Int?
+			let statistics: FetchStatistics
 		}
-		
+
+		let retrievalTime = Date.now.timeIntervalSince(statsForward.networkFetchTime)
+
 		let pageContent = PageContent(
 			text: contentSlice,
 			title: title,
@@ -268,8 +307,13 @@ struct FetchPageTool: ToolImplementation {
 			returnedLength: contentSlice.count,
 			offset: offset,
 			hasMore: hasMore,
-			nextOffset: hasMore ? endOffset : nil
-		)
+			nextOffset: hasMore ? endOffset : nil,
+			statistics: FetchStatistics(
+				retrievalTime: retrievalTime,
+				cacheHit: statsForward.cacheHit,
+				cacheAge: statsForward.cacheAge,
+				cacheTTL: statsForward.cacheTTL,
+				searchTime: nil))
 		
 		let output = StructuredContentOutput(
 			inputRequest: "fetch-page: \(url.absoluteString) (offset: \(offset), limit: \(limit))",

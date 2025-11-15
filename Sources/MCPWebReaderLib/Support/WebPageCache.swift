@@ -22,19 +22,21 @@ actor WebPageCache {
 	}
 	
 	/// Fetch URL with caching support
-	func fetch(url: URL) async throws -> (Data, URLResponse) {
+	func fetch(url: URL, ignoreCache: Bool) async throws -> CacheResponse {
 		let cacheURL = cacheFileURL(for: url)
 		let metadataURL = cacheURL.appendingPathExtension("meta")
 		
 		// Check if cached version exists and is fresh
-		do {
-			return try loadCachedData(cacheURL: cacheURL, metadataURL: metadataURL)
-		} catch {
-			switch error {
-			case .cacheMiss:
-				break
-			case .other(let error):
-				print("Error loading cached object: \(error)")
+		if ignoreCache == false {
+			do {
+				return try await loadCachedData(cacheURL: cacheURL, metadataURL: metadataURL)
+			} catch {
+				switch error {
+				case .cacheMiss:
+					break
+				case .other(let error):
+					print("Error loading cached object: \(error)")
+				}
 			}
 		}
 
@@ -47,37 +49,52 @@ actor WebPageCache {
 			try saveToCache(data: data, url: url, contentType: httpResponse.value(forHTTPHeaderField: "Content-Type"))
 		}
 		
-		return (data, response)
+		return CacheResponse(
+			data: data,
+			response: response,
+			cacheHit: false,
+			cacheAge: nil,
+			cacheTTL: cacheDuration)
 	}
-	
+
 	/// Load cached data if available and fresh
-	private func loadCachedData(cacheURL: URL, metadataURL: URL) throws(CacheLoadError) -> (Data, URLResponse) {
-		let fileManager = FileManager.default
-		
+	private func loadCachedData(cacheURL: URL, metadataURL: URL) async throws(CacheLoadError) -> CacheResponse {
 		guard
 			cacheURL.checkResourceIsAccessible(),
 			metadataURL.checkResourceIsAccessible()
 		else { throw .cacheMiss }
 
 		do {
-			let cacheData = try Data(contentsOf: cacheURL)
+			let modificationDate = (try? cacheURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .now
+			async let cacheData = Data(contentsOf: cacheURL)
 			let metadataData = try Data(contentsOf: metadataURL)
-			let metadata = try JSONDecoder().decode(CacheMetadata.self, from: metadataData)
+			async let metadata = JSONDecoder().decode(CacheMetadata.self, from: metadataData)
 
 			// Check if cache is still fresh
-			guard Date().timeIntervalSince(metadata.timestamp) < cacheDuration else {
+			let cacheAge = Date.now.timeIntervalSince(modificationDate)
+			guard cacheAge < cacheDuration else {
 				throw CacheLoadError.cacheMiss
 			}
 
 			// Return cached data with synthetic response
-			let response = HTTPURLResponse(
+			let response = try await HTTPURLResponse(
 				url: URL(string: metadata.url)!,
 				statusCode: 200,
 				httpVersion: "HTTP/1.1",
 				headerFields: ["Content-Type": metadata.contentType]
 			)!
 
-			return (cacheData, response)
+			// Don't clean up every time - do it 10% of the time.
+			if Int.random(in: 0..<100) > 90 {
+				await cleanupCache()
+			}
+
+			return try await CacheResponse(
+				data: cacheData,
+				response: response,
+				cacheHit: true,
+				cacheAge: cacheAge,
+				cacheTTL: cacheDuration - cacheAge)
 		} catch let error as CacheLoadError {
 			throw error
 		} catch {
@@ -127,12 +144,35 @@ actor WebPageCache {
 			try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
 		}
 	}
-	
+
+	private func cleanupCache() async {
+		let contents = (try? FileManager.default.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+
+		let expired = contents.filter {
+			let modDate = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .now
+
+			return Date.now.timeIntervalSince(modDate) > cacheDuration
+		}
+
+		for expiredCacheItem in expired {
+			try? FileManager.default.removeItem(at: expiredCacheItem)
+		}
+	}
+
 	// MARK: - Cache Metadata
 	
 	private struct CacheMetadata: Codable {
 		let url: String
 		let timestamp: Date
 		let contentType: String
+	}
+
+	struct CacheResponse: Sendable {
+		let data: Data
+		let response: URLResponse
+
+		let cacheHit: Bool
+		let cacheAge: TimeInterval?
+		let cacheTTL: TimeInterval?
 	}
 }
