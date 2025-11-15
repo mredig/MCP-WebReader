@@ -45,6 +45,10 @@ struct FetchPageTool: ToolImplementation {
 				"includeMetadata": .object([
 					"type": "boolean",
 					"description": "Include page metadata like title and description (default: true)"
+				]),
+				"ignoreCache": .object([
+					"type": "boolean",
+					"description": "If cache is counter-beneficial, you can disable it (default: false)"
 				])
 			]),
 			"required": .array([.string("url")])
@@ -97,7 +101,7 @@ struct FetchPageTool: ToolImplementation {
 
 	private struct StatsForward {
 		let startTime: Date
-		let networkFetchTime: Date
+		let networkFetchTime: TimeInterval
 		let parseTime: TimeInterval
 		let cacheHit: Bool
 		let cacheAge: TimeInterval?
@@ -145,7 +149,7 @@ struct FetchPageTool: ToolImplementation {
 
 			let statsForward = StatsForward(
 				startTime: startTime,
-				networkFetchTime: networkFetchTime,
+				networkFetchTime: networkFetchTime.timeIntervalSince(startTime),
 				parseTime: parseTimeEnd.timeIntervalSince(parseTimeStart),
 				cacheHit: cacheResponse.cacheHit,
 				cacheAge: cacheResponse.cacheAge,
@@ -245,8 +249,6 @@ struct FetchPageTool: ToolImplementation {
 
 		let searchEnd = Date()
 
-		let retrievalTime = searchEnd.timeIntervalSince(statsForward.networkFetchTime)
-
 		let searchResult = SearchResult(
 			query: query,
 			matches: matches,
@@ -256,7 +258,8 @@ struct FetchPageTool: ToolImplementation {
 			url: url.absoluteString,
 			webpageLength: totalLength,
 			statistics: FetchStatistics(
-				retrievalTime: retrievalTime,
+				totalTime: searchEnd.timeIntervalSince(statsForward.startTime),
+				networkTime: statsForward.networkFetchTime,
 				parsingTime: statsForward.parseTime,
 				cacheHit: statsForward.cacheHit,
 				cacheAge: statsForward.cacheAge,
@@ -302,8 +305,6 @@ struct FetchPageTool: ToolImplementation {
 			let statistics: FetchStatistics
 		}
 
-		let retrievalTime = Date.now.timeIntervalSince(statsForward.networkFetchTime)
-
 		let pageContent = PageContent(
 			text: contentSlice,
 			title: title,
@@ -315,7 +316,8 @@ struct FetchPageTool: ToolImplementation {
 			hasMore: hasMore,
 			nextOffset: hasMore ? endOffset : nil,
 			statistics: FetchStatistics(
-				retrievalTime: retrievalTime,
+				totalTime: Date.now.timeIntervalSince(statsForward.startTime),
+				networkTime: statsForward.networkFetchTime,
 				parsingTime: statsForward.parseTime,
 				cacheHit: statsForward.cacheHit,
 				cacheAge: statsForward.cacheAge,

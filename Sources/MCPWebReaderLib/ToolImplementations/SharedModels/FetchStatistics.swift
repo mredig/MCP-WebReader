@@ -1,7 +1,8 @@
 import Foundation
 
 struct FetchStatistics: Codable, Sendable, Hashable {
-	let retrievalTime: TimeInterval
+	let totalTime: TimeInterval
+	let networkTime: TimeInterval
 	let parsingTime: TimeInterval
 	let cacheHit: Bool
 	let cacheAge: TimeInterval?
