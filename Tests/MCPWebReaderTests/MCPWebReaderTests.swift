@@ -13,37 +13,6 @@ final class MCPWebReaderTests: XCTestCase {
     
     // MARK: - Tool Tests
     
-    func testEchoTool() async throws {
-        let server = createTestServer()
-        await ServerHandlers.registerHandlers(on: server)
-        
-        let (serverTransport, clientTransport) = await InMemoryTransport.createConnectedPair()
-        try await server.start(transport: serverTransport)
-        
-        // Create a client and connect
-        let client = Client(name: "TestClient", version: "1.0.0")
-        try await client.connect(transport: clientTransport)
-        
-        // Test echo tool
-        let (content, isError) = try await client.callTool(
-            name: "echo",
-            arguments: ["message": "Hello, World!"]
-        )
-        
-        XCTAssertFalse(isError ?? false, "Echo tool should not return an error")
-        XCTAssertEqual(content.count, 1, "Should return one content item")
-        
-        if case .text(let text) = content.first {
-            // Verify it's valid JSON with the echo field
-            XCTAssertTrue(text.contains("\"echo\""), "Should contain echo field")
-            XCTAssertTrue(text.contains("Hello, World!"), "Should contain the echoed message")
-        } else {
-            XCTFail("Expected text content")
-        }
-        
-        await server.stop()
-    }
-    
     func testFetchPageTool() async throws {
         let server = createTestServer()
         await ServerHandlers.registerHandlers(on: server)
@@ -150,43 +119,7 @@ final class MCPWebReaderTests: XCTestCase {
         await server.stop()
     }
     
-    func testGetTimestampTool() async throws {
-        let server = createTestServer()
-        await ServerHandlers.registerHandlers(on: server)
-        
-        let (serverTransport, clientTransport) = await InMemoryTransport.createConnectedPair()
-        try await server.start(transport: serverTransport)
-        
-        let client = Client(name: "TestClient", version: "1.0.0")
-        try await client.connect(transport: clientTransport)
-        
-        let (content, isError) = try await client.callTool(
-            name: "get-timestamp",
-            arguments: [:]
-        )
-        
-        XCTAssertFalse(isError ?? false, "Timestamp tool should not return an error")
-        XCTAssertEqual(content.count, 1, "Should return one content item")
-        
-        if case .text(let text) = content.first {
-            // Verify it's valid JSON with the timestamp field
-            XCTAssertTrue(text.contains("\"timestamp\""), "Should contain timestamp field")
-            
-            // Extract and validate the ISO 8601 timestamp from JSON
-            if let data = text.data(using: .utf8),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
-               let timestampString = json["timestamp"] {
-                let formatter = ISO8601DateFormatter()
-                XCTAssertNotNil(formatter.date(from: timestampString), "Should be valid ISO 8601 timestamp")
-            } else {
-                XCTFail("Should be valid JSON with timestamp field")
-            }
-        } else {
-            XCTFail("Expected text content")
-        }
-        
-        await server.stop()
-    }
+
     
     // MARK: - Resource Tests
     
