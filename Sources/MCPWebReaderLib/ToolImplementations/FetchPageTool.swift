@@ -140,7 +140,45 @@ struct FetchPageTool: ToolImplementation {
 			// Extract text content (removes all HTML tags, scripts, styles)
 			let fullText = try document.text()
 			let totalLength = fullText.count
-			
+
+			var existingLinks: Set<String> = []
+			let links = try document
+				.select("a[href]")
+				.compactMap { link -> Link? in
+					guard
+						let linkText = try? link.text(),
+						linkText.isOccupied,
+						let href = try? link.attr("href"),
+						href.contains("#") == false,
+						href.contains("javascript") == false,
+						existingLinks.contains(href) == false
+					else { return nil }
+					existingLinks.insert(href)
+
+					// Get context from surrounding text
+					let previous = try? link.previousElementSibling()
+					let next = try? link.nextElementSibling()
+
+					let contextBefore = (try? previous?.text())?.suffix(50)
+					let contextAfter = (try? next?.text())?.prefix(50)
+
+					// Resolve relative URLs
+					let absoluteURL: URL?
+					if let absHref = try? link.attr("abs:href"), !absHref.isEmpty {
+						absoluteURL = URL(string: absHref)
+					} else {
+						absoluteURL = URL(string: href, relativeTo: url)?.absoluteURL
+					}
+				
+					guard let finalURL = absoluteURL else { return nil }
+				
+					return Link(
+						text: linkText,
+						url: finalURL,
+						contextBefore: contextBefore.map(String.init)?.emptyIsNil,
+						contextAfter: contextAfter.map(String.init)?.emptyIsNil)
+				}
+
 			// Extract metadata if requested
 			let title: String? = includeMetadata ? (try? document.title()) : nil
 			let description: String? = includeMetadata ? (try? document.select("meta[name=description]").first()?.attr("content")) : nil
@@ -164,6 +202,7 @@ struct FetchPageTool: ToolImplementation {
 					title: title,
 					description: description,
 					totalLength: totalLength,
+					links: links,
 					statsForward: statsForward)
 			} else {
 				// Fetch mode: return paginated content
@@ -172,6 +211,7 @@ struct FetchPageTool: ToolImplementation {
 					title: title,
 					description: description,
 					totalLength: totalLength,
+					links: links,
 					statsForward: statsForward)
 			}
 		} catch let error as ContentError {
@@ -180,7 +220,7 @@ struct FetchPageTool: ToolImplementation {
 			throw ContentError.other(error)
 		}
 	}
-	
+
 	// MARK: - Search Mode
 	
 	private func performSearch(
@@ -189,6 +229,7 @@ struct FetchPageTool: ToolImplementation {
 		title: String?,
 		description: String?,
 		totalLength: Int,
+		links: [Link],
 		statsForward: StatsForward
 	) throws(ContentError) -> CallTool.Result {
 		struct SearchMatch: Codable, Sendable {
@@ -282,6 +323,7 @@ struct FetchPageTool: ToolImplementation {
 		title: String?,
 		description: String?,
 		totalLength: Int,
+		links: [Link],
 		statsForward: StatsForward
 	) throws(ContentError) -> CallTool.Result {
 		// Apply pagination
@@ -302,8 +344,12 @@ struct FetchPageTool: ToolImplementation {
 			let offset: Int
 			let hasMore: Bool
 			let nextOffset: Int?
+			let links: [Link]
 			let statistics: FetchStatistics
 		}
+
+//		let filteredLinks = links
+//			.filter { contentSlice.contains($0.totalContext) }
 
 		let pageContent = PageContent(
 			text: contentSlice,
@@ -315,6 +361,7 @@ struct FetchPageTool: ToolImplementation {
 			offset: offset,
 			hasMore: hasMore,
 			nextOffset: hasMore ? endOffset : nil,
+			links: links,
 			statistics: FetchStatistics(
 				totalTime: Date.now.timeIntervalSince(statsForward.startTime),
 				networkTime: statsForward.networkFetchTime,
