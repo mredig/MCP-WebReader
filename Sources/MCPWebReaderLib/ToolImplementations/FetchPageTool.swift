@@ -40,7 +40,7 @@ struct FetchPageTool: ToolImplementation {
 				]),
 				"limit": .object([
 					"type": "integer",
-					"description": "Maximum number of characters to return (default: 10000). Ignored when query is provided."
+					"description": "Maximum number of characters to return (default: 2500). Ignored when query is provided."
 				]),
 				"includeMetadata": .object([
 					"type": "boolean",
@@ -57,9 +57,13 @@ struct FetchPageTool: ToolImplementation {
 	let offset: Int
 	let limit: Int
 	let includeMetadata: Bool
-	
+
+	private let cache: WebPageCache
+
 	/// Initialize and validate parameters
-	init(arguments: CallTool.Parameters) throws(ContentError) {
+	init(arguments: CallTool.Parameters, cache: WebPageCache) throws(ContentError) {
+		self.cache = cache
+
 		// Extract and validate URL
 		guard let urlString = arguments.strings.url else {
 			throw .missingArgument("url")
@@ -74,7 +78,7 @@ struct FetchPageTool: ToolImplementation {
 		self.url = url
 		self.query = arguments.strings.query
 		self.offset = arguments.integers.offset ?? 0
-		self.limit = arguments.integers.limit ?? 10000
+		self.limit = arguments.integers.limit ?? 2500
 		self.includeMetadata = arguments.bools.includeMetadata ?? true
 		
 		// Validate offset
@@ -91,9 +95,9 @@ struct FetchPageTool: ToolImplementation {
 	/// Execute the tool
 	func callAsFunction() async throws(ContentError) -> CallTool.Result {
 		do {
-			// Fetch the page
-			let (data, response) = try await URLSession.shared.data(from: url)
-			
+			// Fetch the page (with caching)
+			let (data, response) = try await cache.fetch(url: url)
+
 			// Validate HTTP response
 			guard let httpResponse = response as? HTTPURLResponse else {
 				throw ContentError.contentError(message: "Invalid response from server")
