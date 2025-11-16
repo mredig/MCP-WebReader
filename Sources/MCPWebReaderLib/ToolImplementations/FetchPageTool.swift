@@ -65,7 +65,7 @@ struct FetchPageTool: ToolImplementation {
 					"type": "boolean",
 					"description": "Include links found on the page (default: false)"
 				]),
-				"sameSiteOnly": .object([
+				"sameSiteLinksOnly": .object([
 					"type": "boolean",
 					"description": "When including links, only return links to the same site (default: true). Ignored if includeLinks is false."
 				]),
@@ -89,7 +89,7 @@ struct FetchPageTool: ToolImplementation {
 	let ignoreCache: Bool
 	let includeMetadata: Bool
 	let includeLinks: Bool
-	let sameSiteOnly: Bool
+	let sameSiteLinksOnly: Bool
 
 	private let engine: WebPageEngine
 
@@ -117,7 +117,7 @@ struct FetchPageTool: ToolImplementation {
 		self.ignoreCache = arguments.bools.ignoreCache ?? false
 		self.includeMetadata = arguments.bools.includeMetadata ?? true
 		self.includeLinks = arguments.bools.includeLinks ?? false
-		self.sameSiteOnly = arguments.bools.sameSiteOnly ?? true
+		self.sameSiteLinksOnly = arguments.bools.sameSiteLinksOnly ?? true
 		
 		// Extract custom headers if provided
 		if let headersDict = arguments.arguments?["customHeaders"]?.objectValue {
@@ -226,7 +226,7 @@ struct FetchPageTool: ToolImplementation {
 					guard let finalURL = absoluteURL else { return nil }
 					
 					// Filter by same-site if requested
-					if sameSiteOnly {
+					if sameSiteLinksOnly {
 						guard finalURL.host == url.host else { return nil }
 					}
 				
