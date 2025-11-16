@@ -155,12 +155,24 @@ struct SearchWebTool: ToolImplementation {
 			throw .missingArgument("query")
 		}
 		self.query = query
-		
-		// Extract search engine - try customSearchURL first, then engine parameter
+
+		// Extract search engine - customSearchURL required if engine is "custom"
 		let engineString = arguments.strings.engine ?? "duckduckgo"
-		
-		guard let searchEngine = arguments.strings.customSearchURL.flatMap({ SearchEngine(from: $0) }) else {
-			throw .contentError(message: "Invalid engine: \(engineString). Must be one of: google, duckduckgo, bing, brave, or a custom URL template with {{{SEARCH_QUERY}}}")
+		let searchEngine: SearchEngine
+		if engineString == "custom" {
+			guard
+				let customURL = arguments.strings.customSearchURL,
+				URL(string: customURL) != nil,
+				let engine = SearchEngine(from: customURL)
+			else {
+				throw .contentError(message: "customSearchURL must contain {{{SEARCH_QUERY}}} placeholder")
+			}
+			searchEngine = engine
+		} else {
+			guard let engine = SearchEngine(from: engineString) else {
+				throw .contentError(message: "Invalid engine: \(engineString). Must be one of: google, duckduckgo, bing, brave, or a custom URL template with {{{SEARCH_QUERY}}}")
+			}
+			searchEngine = engine
 		}
 		
 		self.engine = searchEngine
