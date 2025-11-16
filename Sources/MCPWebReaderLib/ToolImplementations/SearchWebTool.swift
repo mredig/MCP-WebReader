@@ -116,9 +116,9 @@ struct SearchWebTool: ToolImplementation {
 		
 		var defaultRenderJS: Bool {
 			switch self {
-			case .google, .bing:
+			case .google, .bing, .duckduckgo:
 				return true
-			case .duckduckgo, .brave, .custom:
+			case .brave, .custom:
 				return false
 			}
 		}
