@@ -57,7 +57,12 @@ struct FetchPageTool: ToolImplementation {
 				"ignoreCache": .object([
 					"type": "boolean",
 					"description": "If cache is counter-beneficial, you can disable it (default: false)"
-				])
+				]),
+				"renderJS": .object([
+					"type": "boolean",
+					"description": "Instead of directly loading the data from the webserver, a WKWebView will be loaded and allowed to settle, rendering the JS prior to capturing the DOM's html. This is far less efficient, but might be necessary for some sites. (default: false)"
+				]),
+
 			]),
 			"required": .array([.string("url")])
 		])
@@ -69,6 +74,7 @@ struct FetchPageTool: ToolImplementation {
 	let offset: Int
 	let limit: Int
 	let ignoreCache: Bool
+	let renderJS: Bool
 
 	let includeMetadata: Bool
 	let includeLinks: Bool
@@ -99,7 +105,8 @@ struct FetchPageTool: ToolImplementation {
 		self.includeMetadata = arguments.bools.includeMetadata ?? true
 		self.includeLinks = arguments.bools.includeLinks ?? false
 		self.sameSiteOnly = arguments.bools.sameSiteOnly ?? false
-		
+		self.renderJS = arguments.bools.renderJS ?? false
+
 		// Validate offset
 		guard self.offset >= 0 else {
 			throw .contentError(message: "offset must be >= 0")
@@ -125,7 +132,7 @@ struct FetchPageTool: ToolImplementation {
 		do {
 			let startTime = Date()
 			// Fetch the page (with caching)
-			let cacheResponse = try await cache.fetch(url: url, ignoreCache: ignoreCache)
+			let cacheResponse = try await cache.fetch(url: url, renderJS: renderJS, ignoreCache: ignoreCache)
 			let data = cacheResponse.data
 			let response = cacheResponse.response
 
