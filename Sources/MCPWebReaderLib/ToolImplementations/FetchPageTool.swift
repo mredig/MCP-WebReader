@@ -46,6 +46,14 @@ struct FetchPageTool: ToolImplementation {
 					"type": "boolean",
 					"description": "Include page metadata like title and description (default: true)"
 				]),
+				"includeLinks": .object([
+					"type": "boolean",
+					"description": "Include links found on the page (default: false)"
+				]),
+				"sameSiteOnly": .object([
+					"type": "boolean",
+					"description": "When including links, only return links to the same site (default: true). Ignored if includeLinks is false."
+				]),
 				"ignoreCache": .object([
 					"type": "boolean",
 					"description": "If cache is counter-beneficial, you can disable it (default: false)"
@@ -63,6 +71,8 @@ struct FetchPageTool: ToolImplementation {
 	let ignoreCache: Bool
 
 	let includeMetadata: Bool
+	let includeLinks: Bool
+	let sameSiteOnly: Bool
 
 	private let cache: WebPageCache
 
@@ -87,6 +97,8 @@ struct FetchPageTool: ToolImplementation {
 		self.limit = arguments.integers.limit ?? 2500
 		self.ignoreCache = arguments.bools.ignoreCache ?? false
 		self.includeMetadata = arguments.bools.includeMetadata ?? true
+		self.includeLinks = arguments.bools.includeLinks ?? false
+		self.sameSiteOnly = arguments.bools.sameSiteOnly ?? false
 		
 		// Validate offset
 		guard self.offset >= 0 else {
@@ -141,10 +153,12 @@ struct FetchPageTool: ToolImplementation {
 			let fullText = try document.text()
 			let totalLength = fullText.count
 
-			var existingLinks: Set<String> = []
-			let links = try document
-				.select("a[href]")
-				.compactMap { link -> Link? in
+			let links: [Link]
+			if includeLinks {
+				var existingLinks: Set<String> = []
+				links = try document
+					.select("a[href]")
+					.compactMap { link -> Link? in
 					guard
 						let linkText = try? link.text(),
 						linkText.isOccupied,
@@ -171,13 +185,21 @@ struct FetchPageTool: ToolImplementation {
 					}
 				
 					guard let finalURL = absoluteURL else { return nil }
+					
+					// Filter by same-site if requested
+					if sameSiteOnly {
+						guard finalURL.host == url.host else { return nil }
+					}
 				
 					return Link(
 						text: linkText,
 						url: finalURL,
 						contextBefore: contextBefore.map(String.init)?.emptyIsNil,
 						contextAfter: contextAfter.map(String.init)?.emptyIsNil)
-				}
+					}
+			} else {
+				links = []
+			}
 
 			// Extract metadata if requested
 			let title: String? = includeMetadata ? (try? document.title()) : nil
