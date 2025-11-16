@@ -28,7 +28,7 @@ enum ServerHandlers {
 			return .init(tools: tools, nextCursor: nil)
 		}
 
-		let cache = WebPageCache()
+		let engine = WebPageEngine()
 
 		// Handle tool calls
 		await server.withMethodHandler(CallTool.self) { params in
@@ -42,7 +42,7 @@ enum ServerHandlers {
 				}
 
 				// Create instance and execute
-				let toolInstance = try toolType.init(arguments: params, cache: cache)
+				let toolInstance = try toolType.init(arguments: params, engine: engine)
 				return try await toolInstance()
 			} catch {
 				let errorMessage: String

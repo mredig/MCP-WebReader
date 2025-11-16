@@ -14,7 +14,7 @@ enum ToolRegistry {
 	/// The key is the tool's command, the value is the tool implementation type.
 	static let registeredTools: [ToolCommand: any ToolImplementation.Type] = [
 		.fetchPage: FetchPageTool.self,
-		// Add your custom tools here:
-		// .myTool: MyTool.self,
+		.searchPage: SearchPageTool.self,
+		.searchWeb: SearchWebTool.self,
 	]
 }

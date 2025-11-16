@@ -71,16 +71,16 @@ final class MCPWebReaderTests: XCTestCase {
         let client = Client(name: "TestClient", version: "1.0.0")
         try await client.connect(transport: clientTransport)
         
-        // Test fetch-page tool with search query
+        // Test search-page tool
         let (content, isError) = try await client.callTool(
-            name: "fetch-page",
+            name: "search-page",
             arguments: [
                 "url": "https://example.com",
                 "query": "example"
             ]
         )
         
-        XCTAssertFalse(isError ?? false, "Fetch-page search should not return an error")
+        XCTAssertFalse(isError ?? false, "Search-page should not return an error")
         XCTAssertEqual(content.count, 1, "Should return one content item")
         
         if case .text(let text) = content.first {

@@ -3,8 +3,8 @@ import Foundation
 import SwiftPizzaSnips
 import WebKit
 
-/// Helper for caching fetched webpage content
-actor WebPageCache {
+/// Engine for fetching and caching webpage content
+actor WebPageEngine {
 //	static let shared = WebPageCache()
 	
 	private let cacheDirectory: URL
@@ -23,7 +23,14 @@ actor WebPageCache {
 	}
 	
 	/// Fetch URL with caching support
-	func fetch(url: URL, renderJS: Bool, ignoreCache: Bool) async throws -> CacheResponse {
+	func fetch(
+		url: URL,
+		renderJS: Bool,
+		ignoreCache: Bool,
+		httpMethod: String = "GET",
+		userAgent: String? = nil,
+		customHeaders: [String: String] = [:]
+	) async throws -> CacheResponse {
 		let cacheURL = cacheFileURL(for: url, hasRenderedJS: renderJS)
 		let metadataURL = cacheURL.appendingPathExtension("meta")
 		
@@ -41,7 +48,21 @@ actor WebPageCache {
 			}
 		}
 
-		let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+		var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+		request.httpMethod = httpMethod
+		
+		// Set custom user agent if provided
+		if let userAgent = userAgent {
+			request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+		}
+		
+		// Add custom headers, filtering out potentially problematic ones
+		let blockedHeaders = Set(["host", "content-length", "connection"])
+		for (key, value) in customHeaders {
+			let lowercaseKey = key.lowercased()
+			guard !blockedHeaders.contains(lowercaseKey) else { continue }
+			request.setValue(value, forHTTPHeaderField: key)
+		}
 		// Cache miss or stale - fetch fresh data
 		let responseAndData: (Data, URLResponse)
 		if renderJS {

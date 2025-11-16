@@ -10,7 +10,7 @@ protocol ToolImplementation: Sendable {
 	static var tool: Tool { get }
 	
 	/// Initialize with tool arguments, extracting and validating required parameters
-	init(arguments: CallTool.Parameters, cache: WebPageCache) throws(ContentError)
+	init(arguments: CallTool.Parameters, engine: WebPageEngine) throws(ContentError)
 
 	/// Execute the tool and return structured output
 	func callAsFunction() async throws(ContentError) -> CallTool.Result
