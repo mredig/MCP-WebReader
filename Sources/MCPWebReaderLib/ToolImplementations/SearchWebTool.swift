@@ -33,8 +33,8 @@ struct SearchWebTool: ToolImplementation {
 				]),
 				"engine": .object([
 					"type": "string",
-					"description": "Search engine to use (default: duckduckgo). Options: google, duckduckgo, bing, brave, or a custom URL template containing {{{SEARCH_QUERY}}}",
-					"enum": .array([.string("google"), .string("duckduckgo"), .string("bing"), .string("brave"), .string("custom")])
+					"description": "Search engine to use (default: duckduckgo-lite). If `custom` is specified, `customSearchURL` must be populated.",
+					"enum": .array(SearchEngine.allCases.map { .string($0.name) })
 				]),
 				"customSearchURL": .object([
 					"type": "string",
@@ -69,25 +69,36 @@ struct SearchWebTool: ToolImplementation {
 		])
 	)
 	
-	enum SearchEngine {
+	enum SearchEngine: CaseIterable {
 		case google
-		case duckduckgo
+		case duckDuckGo
+		case duckDuckGoLite
+		case duckDuckGoHTML
 		case bing
 		case brave
 		case custom(String)
-		
+
+		/// Technically violates the contract in that it doesn't contain `custom`
+		static var allCases: [SearchWebTool.SearchEngine] {
+			[.google, .duckDuckGo, .duckDuckGoHTML, .duckDuckGoLite, .bing, .brave]
+		}
+
 		/// Initialize from a string - either a known engine name or a custom template URL
 		/// - Parameter string: Engine name ("google", "duckduckgo", etc.) or custom URL template containing {{{SEARCH_QUERY}}}
 		/// - Returns: SearchEngine case if valid, nil otherwise
 		init?(from string: String) {
 			switch string.lowercased() {
-			case "google":
+			case Self.google.name:
 				self = .google
-			case "duckduckgo":
-				self = .duckduckgo
-			case "bing":
+			case Self.duckDuckGo.name:
+				self = .duckDuckGo
+			case Self.duckDuckGoLite.name:
+				self = .duckDuckGoLite
+			case Self.duckDuckGoHTML.name:
+				self = .duckDuckGoHTML
+			case Self.bing.name:
 				self = .bing
-			case "brave":
+			case Self.brave.name:
 				self = .brave
 			default:
 				// Check if it's a custom template
@@ -103,8 +114,12 @@ struct SearchWebTool: ToolImplementation {
 			switch self {
 			case .google:
 				return "https://www.google.com/search?q={{{SEARCH_QUERY}}}"
-			case .duckduckgo:
+			case .duckDuckGo:
 				return "https://duckduckgo.com/?q={{{SEARCH_QUERY}}}"
+			case .duckDuckGoHTML:
+				return "https://duckduckgo.com/html/?q={{{SEARCH_QUERY}}}"
+			case .duckDuckGoLite:
+				return "https://duckduckgo.com/lite/?q={{{SEARCH_QUERY}}}"
 			case .bing:
 				return "https://www.bing.com/search?q={{{SEARCH_QUERY}}}"
 			case .brave:
@@ -116,20 +131,22 @@ struct SearchWebTool: ToolImplementation {
 		
 		var defaultRenderJS: Bool {
 			switch self {
-			case .google, .bing, .duckduckgo:
+			case .google, .bing, .duckDuckGo:
 				return true
-			case .brave, .custom:
+			case .duckDuckGoLite, .duckDuckGoHTML, .brave, .custom:
 				return false
 			}
 		}
 		
 		var name: String {
 			switch self {
-			case .google: return "google"
-			case .duckduckgo: return "duckduckgo"
-			case .bing: return "bing"
-			case .brave: return "brave"
-			case .custom: return "custom"
+			case .google: "google"
+			case .duckDuckGo: "duckduckgo"
+			case .duckDuckGoHTML: "duckduckgo-html"
+			case .duckDuckGoLite: "duckduckgo-lite"
+			case .bing: "bing"
+			case .brave: "brave"
+			case .custom: "custom"
 			}
 		}
 	}
@@ -157,7 +174,7 @@ struct SearchWebTool: ToolImplementation {
 		self.query = query
 
 		// Extract search engine - customSearchURL required if engine is "custom"
-		let engineString = arguments.strings.engine ?? "duckduckgo"
+		let engineString = arguments.strings.engine ?? "duckduckgo-lite"
 		let searchEngine: SearchEngine
 		if engineString == "custom" {
 			guard
