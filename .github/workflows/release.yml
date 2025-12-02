@@ -39,12 +39,13 @@ jobs:
           mkdir -p ./build
           cp /tmp/mcp-webreader ./build/mcp-webreader
 
-      - name: Create tarball
+      - name: Create tarball and SHA256
         run: |
           cd ./build
           tar -czf mcp-webreader-macos.tar.gz mcp-webreader
-          shasum -a 256 mcp-webreader-macos.tar.gz
+          shasum -a 256 mcp-webreader-macos.tar.gz | tee mcp-webreader-macos.tar.gz.sha256
           mv mcp-webreader-macos.tar.gz $GITHUB_WORKSPACE/
+          mv mcp-webreader-macos.tar.gz.sha256 $GITHUB_WORKSPACE/
 
       - name: Extract version from tag
         id: version
@@ -53,7 +54,9 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: mcp-webreader-macos.tar.gz
+          files: |
+            mcp-webreader-macos.tar.gz
+            mcp-webreader-macos.tar.gz.sha256
           tag_name: ${{ steps.version.outputs.VERSION }}
           name: Release ${{ steps.version.outputs.VERSION }}
           draft: false
