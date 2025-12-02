@@ -18,13 +18,27 @@ jobs:
         with:
           swift-version: '6.0'
       
-      - name: Build universal binary
+      - name: Build arm64 binary
         run: |
-          swift build -c release --arch arm64 --arch x86_64
+          xcodebuild -scheme MCP-WebReader -configuration Release -destination 'platform=macOS,arch=arm64'
+          DERIVED_DATA=$(find ~/Library/Developer/Xcode/DerivedData -name "MCP-WebReader-*" -type d -maxdepth 1 | head -1)
+          cp "$DERIVED_DATA/Build/Products/Release/mcp-webreader" /tmp/mcp-webreader-arm64
+      
+      - name: Build x86_64 binary
+        run: |
+          xcodebuild -scheme MCP-WebReader -configuration Release -destination 'platform=macOS,arch=x86_64'
+          DERIVED_DATA=$(find ~/Library/Developer/Xcode/DerivedData -name "MCP-WebReader-*" -type d -maxdepth 1 | head -1)
+          cp "$DERIVED_DATA/Build/Products/Release/mcp-webreader" /tmp/mcp-webreader-x86_64
+      
+      - name: Create universal binary
+        run: |
+          lipo -create /tmp/mcp-webreader-arm64 /tmp/mcp-webreader-x86_64 -output /tmp/mcp-webreader
+          mkdir -p ./build
+          cp /tmp/mcp-webreader ./build/mcp-webreader
       
       - name: Create tarball
         run: |
-          cd .build/apple/Products/Release
+          cd ./build
           tar -czf mcp-webreader-macos.tar.gz mcp-webreader
           shasum -a 256 mcp-webreader-macos.tar.gz
           mv mcp-webreader-macos.tar.gz $GITHUB_WORKSPACE/
