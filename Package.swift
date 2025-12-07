@@ -25,12 +25,14 @@ let package = Package(
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.3.0"),
         // Swift Logging
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
+        .package(url: "https://github.com/apple/swift-crypto.git", "1.0.0" ..< "5.0.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.6.2"),
-		.package(url: "https://github.com/mredig/SwiftPizzaSnips.git", branch: "0.4.38g"),
+		.package(url: "https://github.com/mredig/SwiftPizzaSnips.git", branch: "0.4.38h"),
 		// HTML Parsing
 		.package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
     ],
     targets: [
+	    .target(name: "WebReaderLinuxCompat"),
 		.target(
 			name: "MCPWebReaderLib",
 			dependencies: [
@@ -39,6 +41,8 @@ let package = Package(
 				.product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
 				.product(name: "Logging", package: "swift-log"),
 				.product(name: "SwiftSoup", package: "SwiftSoup"),
+				.product(name: "Crypto", package: "swift-crypto"),
+				.target(name: "WebReaderLinuxCompat", condition: .when(platforms: [.linux])),
 			],
 			swiftSettings: [
 				.enableUpcomingFeature("StrictConcurrency")

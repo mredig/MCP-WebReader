@@ -1,27 +1,33 @@
-import CryptoKit
+import Crypto
 import Foundation
 import SwiftPizzaSnips
+import WebReaderLinuxCompat
+#if canImport(WebKit)
 import WebKit
+#endif
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Engine for fetching and caching webpage content
 actor WebPageEngine {
 //	static let shared = WebPageCache()
-	
+
 	private let cacheDirectory: URL
 	private let cacheDuration: TimeInterval = 3600 // 1 hour
-	
+
 	init() {
 		// Get system cache directory
 		let cacheDir = URL
 			.cachesDirectory
-			.appendingPathComponent("com.webreader.mcp", conformingTo: .folder)
+			.appending(path: "com.webreader.mcp")
 
 		self.cacheDirectory = cacheDir
-		
+
 		// Create cache directory if it doesn't exist
 		try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
 	}
-	
+
 	/// Fetch URL with caching support
 	func fetch(
 		url: URL,
@@ -33,7 +39,7 @@ actor WebPageEngine {
 	) async throws -> CacheResponse {
 		let cacheURL = cacheFileURL(for: url, hasRenderedJS: renderJS)
 		let metadataURL = cacheURL.appendingPathExtension("meta")
-		
+
 		// Check if cached version exists and is fresh
 		if ignoreCache == false {
 			do {
@@ -50,12 +56,12 @@ actor WebPageEngine {
 
 		var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
 		request.httpMethod = httpMethod
-		
+
 		// Set custom user agent if provided
 		if let userAgent = userAgent {
 			request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 		}
-		
+
 		// Add custom headers, filtering out potentially problematic ones
 		let blockedHeaders = Set(["host", "content-length", "connection"])
 		for (key, value) in customHeaders {
@@ -66,7 +72,11 @@ actor WebPageEngine {
 		// Cache miss or stale - fetch fresh data
 		let responseAndData: (Data, URLResponse)
 		if renderJS {
+			#if canImport(WebKit)
 			responseAndData = try await loadJSRenderedPage(urlRequest: request)
+			#else
+			throw FetchError.jsRenderingNotSupportedOnThisSystem
+			#endif
 		} else {
 			responseAndData = try await URLSession.shared.data(for: request)
 		}
@@ -77,7 +87,7 @@ actor WebPageEngine {
 		   (200...299).contains(httpResponse.statusCode) {
 			try saveToCache(data: data, url: url, hasRenderedJS: renderJS, contentType: httpResponse.value(forHTTPHeaderField: "Content-Type"))
 		}
-		
+
 		return CacheResponse(
 			data: data,
 			response: response,
@@ -86,6 +96,13 @@ actor WebPageEngine {
 			cacheTTL: cacheDuration)
 	}
 
+	#if !canImport(WebKit)
+	public enum FetchError: Error {
+		case jsRenderingNotSupportedOnThisSystem
+	}
+	#endif
+
+	#if canImport(WebKit)
 	@MainActor
 	private func loadJSRenderedPage(urlRequest: URLRequest) async throws -> (Data, URLResponse) {
 		let config = WKWebViewConfiguration()
@@ -139,7 +156,7 @@ actor WebPageEngine {
 						hash = newHash
 						continue
 					}
-					
+
 					successes += 1
 				}
 			})
@@ -160,6 +177,7 @@ actor WebPageEngine {
 
 		return (data, response)
 	}
+	#endif
 
 	/// Load cached data if available and fresh
 	private func loadCachedData(cacheURL: URL, metadataURL: URL) async throws(CacheLoadError) -> CacheResponse {
@@ -215,31 +233,31 @@ actor WebPageEngine {
 	private func saveToCache(data: Data, url: URL, hasRenderedJS: Bool, contentType: String?) throws {
 		let cacheURL = cacheFileURL(for: url, hasRenderedJS: hasRenderedJS)
 		let metadataURL = cacheURL.appendingPathExtension("meta")
-		
+
 		// Write data
 		try data.write(to: cacheURL, options: .atomic)
-		
+
 		// Write metadata
 		let metadata = CacheMetadata(
 			url: url.absoluteString,
 			timestamp: Date(),
 			contentType: contentType ?? "text/html"
 		)
-		
+
 		let metadataData = try JSONEncoder().encode(metadata)
 		try metadataData.write(to: metadataURL, options: .atomic)
 	}
-	
+
 	/// Get cache file URL for a given webpage URL
 	private func cacheFileURL(for url: URL, hasRenderedJS: Bool) -> URL {
 		// Generate filename from URL hash
 		let urlString = url.absoluteString
 		let hash = Insecure.MD5.hash(data: Data("\(urlString)-hasRenderedJS-\(hasRenderedJS)".utf8))
 		let hashString = hash.compactMap { String(format: "%02x", $0) }.joined()
-		
+
 		return cacheDirectory.appendingPathComponent(hashString)
 	}
-	
+
 	/// Clear all cached content
 	func clearCache() throws {
 		let fileManager = FileManager.default
@@ -264,7 +282,7 @@ actor WebPageEngine {
 	}
 
 	// MARK: - Cache Metadata
-	
+
 	private struct CacheMetadata: Codable {
 		let url: String
 		let timestamp: Date
@@ -280,6 +298,7 @@ actor WebPageEngine {
 		let cacheTTL: TimeInterval?
 	}
 
+	#if canImport(WebKit)
 	private final class SimpleNavDelegate: NSObject, WKNavigationDelegate {
 		let finishNavigation: @Sendable @MainActor (WKWebView, WKNavigation, Error?) -> Void
 
@@ -302,6 +321,7 @@ actor WebPageEngine {
 			return .allow
 		}
 	}
+	#endif
 }
 
 enum BasicTimeoutError: TimedOutError, TypedWrappingError {

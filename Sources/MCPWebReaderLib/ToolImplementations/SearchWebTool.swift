@@ -1,6 +1,9 @@
 import MCP
 import Foundation
 import SwiftSoup
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 extension ToolCommand {
 	static let searchWeb = ToolCommand(rawValue: "search-web")
@@ -20,7 +23,7 @@ extension ToolCommand {
 /// - Shares cache with other tools for efficiency
 struct SearchWebTool: ToolImplementation {
 	static let command: ToolCommand = .searchWeb
-	
+
 	static let tool = Tool(
 		name: command.rawValue,
 		description: "Search the web using a search engine (Google, DuckDuckGo, Bing, Brave) or a custom search URL template. Returns links with context from search results. Works symbiotically with other tools: use search-web to discover relevant URLs, then use fetch-page to read content from those URLs or search-page to search within them. Uses caching for efficiency.",
@@ -68,7 +71,7 @@ struct SearchWebTool: ToolImplementation {
 			"required": .array([.string("query")])
 		])
 	)
-	
+
 	enum SearchEngine: CaseIterable {
 		case google
 		case duckDuckGo
@@ -109,7 +112,7 @@ struct SearchWebTool: ToolImplementation {
 				}
 			}
 		}
-		
+
 		var urlTemplate: String {
 			switch self {
 			case .google:
@@ -128,7 +131,7 @@ struct SearchWebTool: ToolImplementation {
 				return template
 			}
 		}
-		
+
 		var defaultRenderJS: Bool {
 			switch self {
 			case .google, .bing, .duckDuckGo:
@@ -137,7 +140,7 @@ struct SearchWebTool: ToolImplementation {
 				return false
 			}
 		}
-		
+
 		var name: String {
 			switch self {
 			case .google: "google"
@@ -150,7 +153,7 @@ struct SearchWebTool: ToolImplementation {
 			}
 		}
 	}
-	
+
 	// Typed properties
 	let query: String
 	let engine: SearchEngine
@@ -160,13 +163,13 @@ struct SearchWebTool: ToolImplementation {
 	let customHeaders: [String: String]
 	let ignoreCache: Bool
 	let includeMetadata: Bool
-	
+
 	private let webEngine: WebPageEngine
-	
+
 	/// Initialize and validate parameters
 	init(arguments: CallTool.Parameters, engine: WebPageEngine) throws(ContentError) {
 		self.webEngine = engine
-		
+
 		// Extract and validate query
 		guard let query = arguments.strings.query, !query.isEmpty else {
 			throw .missingArgument("query")
@@ -191,17 +194,17 @@ struct SearchWebTool: ToolImplementation {
 			}
 			searchEngine = engine
 		}
-		
+
 		self.engine = searchEngine
-		
+
 		// Use intelligent default for renderJS based on engine, or explicit value if provided
 		self.renderJS = arguments.bools.renderJS ?? searchEngine.defaultRenderJS
-		
+
 		self.httpMethod = arguments.strings.httpMethod ?? "GET"
 		self.userAgent = arguments.strings.userAgent
 		self.ignoreCache = arguments.bools.ignoreCache ?? false
 		self.includeMetadata = arguments.bools.includeMetadata ?? true
-		
+
 		// Extract custom headers if provided
 		if let headersDict = arguments.arguments?["customHeaders"]?.objectValue {
 			var headers: [String: String] = [:]
@@ -214,7 +217,7 @@ struct SearchWebTool: ToolImplementation {
 			self.customHeaders = [:]
 		}
 	}
-	
+
 	private struct StatsForward {
 		let startTime: Date
 		let networkFetchTime: TimeInterval
@@ -223,7 +226,7 @@ struct SearchWebTool: ToolImplementation {
 		let cacheAge: TimeInterval?
 		let cacheTTL: TimeInterval?
 	}
-	
+
 	/// Execute the tool
 	func callAsFunction() async throws(ContentError) -> CallTool.Result {
 		do {
@@ -231,13 +234,13 @@ struct SearchWebTool: ToolImplementation {
 			let urlTemplate = engine.urlTemplate
 			let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
 			let urlString = urlTemplate.replacingOccurrences(of: "{{{SEARCH_QUERY}}}", with: encodedQuery)
-			
+
 			guard let url = URL(string: urlString) else {
 				throw ContentError.contentError(message: "Failed to construct valid search URL")
 			}
-			
+
 			let startTime = Date()
-			
+
 			// Fetch the search results page (with caching)
 			let cacheResponse = try await webEngine.fetch(
 				url: url,
@@ -249,27 +252,27 @@ struct SearchWebTool: ToolImplementation {
 			)
 			let data = cacheResponse.data
 			let response = cacheResponse.response
-			
+
 			let networkFetchTime = Date()
-			
+
 			// Validate HTTP response
 			guard let httpResponse = response as? HTTPURLResponse else {
 				throw ContentError.contentError(message: "Invalid response from server")
 			}
-			
+
 			guard (200...299).contains(httpResponse.statusCode) else {
 				throw ContentError.contentError(message: "HTTP \(httpResponse.statusCode): Failed to fetch search results")
 			}
-			
+
 			// Convert to string
 			guard let html = String(data: data, encoding: .utf8) else {
 				throw ContentError.contentError(message: "Failed to decode HTML content")
 			}
-			
+
 			let parseTimeStart = Date()
 			// Parse HTML
 			let document = try SwiftSoup.parse(html)
-			
+
 			// Extract links (always enabled for search results)
 			var existingLinks: Set<String> = []
 			let links = try document
@@ -284,14 +287,14 @@ struct SearchWebTool: ToolImplementation {
 						existingLinks.contains(href) == false
 					else { return nil }
 					existingLinks.insert(href)
-					
+
 					// Get context from surrounding text
 					let previous = try? link.previousElementSibling()
 					let next = try? link.nextElementSibling()
-					
+
 					let contextBefore = (try? previous?.text())?.suffix(50)
 					let contextAfter = (try? next?.text())?.prefix(50)
-					
+
 					// Resolve relative URLs
 					let absoluteURL: URL?
 					if let absHref = try? link.attr("abs:href"), !absHref.isEmpty {
@@ -299,24 +302,24 @@ struct SearchWebTool: ToolImplementation {
 					} else {
 						absoluteURL = URL(string: href, relativeTo: url)?.absoluteURL
 					}
-					
+
 					guard let finalURL = absoluteURL else { return nil }
-					
+
 					// Don't filter by same-site for search results - we want external links
-					
+
 					return Link(
 						text: linkText,
 						url: finalURL,
 						contextBefore: contextBefore.map(String.init)?.emptyIsNil,
 						contextAfter: contextAfter.map(String.init)?.emptyIsNil)
 				}
-			
+
 			// Extract metadata if requested
 			let title: String? = includeMetadata ? (try? document.title()) : nil
 			let description: String? = includeMetadata ? (try? document.select("meta[name=description]").first()?.attr("content")) : nil
-			
+
 			let parseTimeEnd = Date()
-			
+
 			let statsForward = StatsForward(
 				startTime: startTime,
 				networkFetchTime: networkFetchTime.timeIntervalSince(startTime),
@@ -324,7 +327,7 @@ struct SearchWebTool: ToolImplementation {
 				cacheHit: cacheResponse.cacheHit,
 				cacheAge: cacheResponse.cacheAge,
 				cacheTTL: cacheResponse.cacheTTL)
-			
+
 			// Return search results (links only, no full page content)
 			return try buildSearchResults(
 				url: url,
@@ -338,9 +341,9 @@ struct SearchWebTool: ToolImplementation {
 			throw ContentError.other(error)
 		}
 	}
-	
+
 	// MARK: - Results Building
-	
+
 	private func buildSearchResults(
 		url: URL,
 		title: String?,
@@ -358,7 +361,7 @@ struct SearchWebTool: ToolImplementation {
 			let linkCount: Int
 			let statistics: FetchStatistics
 		}
-		
+
 		let result = SearchWebResult(
 			query: query,
 			searchEngine: engine.name,
@@ -375,13 +378,13 @@ struct SearchWebTool: ToolImplementation {
 				cacheAge: statsForward.cacheAge,
 				cacheTTL: statsForward.cacheTTL,
 				searchTime: nil))
-		
+
 		let output = StructuredContentOutput(
 			inputRequest: "search-web: \"\(query)\" (engine: \(engine.name))",
 			metaData: nil,
 			content: [result]
 		)
-		
+
 		return output.toResult()
 	}
 }
