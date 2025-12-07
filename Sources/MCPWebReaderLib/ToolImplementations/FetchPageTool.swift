@@ -1,6 +1,9 @@
 import MCP
 import Foundation
 import SwiftSoup
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 extension ToolCommand {
 	static let fetchPage = ToolCommand(rawValue: "fetch-page")
@@ -21,7 +24,7 @@ extension ToolCommand {
 /// - Caching for performance
 struct FetchPageTool: ToolImplementation {
 	static let command: ToolCommand = .fetchPage
-	
+
 	// JSON Schema reference: https://json-schema.org/understanding-json-schema/reference
 	static let tool = Tool(
 		name: command.rawValue,
@@ -77,7 +80,7 @@ struct FetchPageTool: ToolImplementation {
 			"required": .array([.string("url")])
 		])
 	)
-	
+
 	// Typed properties
 	let url: URL
 	let offset: Int
@@ -101,13 +104,13 @@ struct FetchPageTool: ToolImplementation {
 		guard let urlString = arguments.strings.url else {
 			throw .missingArgument("url")
 		}
-		
+
 		guard let url = URL(string: urlString),
 			  let scheme = url.scheme,
 			  ["http", "https"].contains(scheme) else {
 			throw .contentError(message: "Invalid URL. Must be a valid http:// or https:// URL")
 		}
-		
+
 		self.url = url
 		self.offset = arguments.integers.offset ?? 0
 		self.limit = arguments.integers.limit ?? 2500
@@ -118,7 +121,7 @@ struct FetchPageTool: ToolImplementation {
 		self.includeMetadata = arguments.bools.includeMetadata ?? true
 		self.includeLinks = arguments.bools.includeLinks ?? false
 		self.sameSiteLinksOnly = arguments.bools.sameSiteLinksOnly ?? true
-		
+
 		// Extract custom headers if provided
 		if let headersDict = arguments.arguments?["customHeaders"]?.objectValue {
 			var headers: [String: String] = [:]
@@ -130,12 +133,12 @@ struct FetchPageTool: ToolImplementation {
 		} else {
 			self.customHeaders = [:]
 		}
-		
+
 		// Validate offset
 		guard self.offset >= 0 else {
 			throw .contentError(message: "offset must be >= 0")
 		}
-		
+
 		// Validate limit
 		guard self.limit > 0 && self.limit <= 500000 else {
 			throw .contentError(message: "limit must be between 1 and 500000")
@@ -155,7 +158,7 @@ struct FetchPageTool: ToolImplementation {
 	func callAsFunction() async throws(ContentError) -> CallTool.Result {
 		do {
 			let startTime = Date()
-			
+
 			// Fetch the page (with caching)
 			let cacheResponse = try await engine.fetch(
 				url: url,
@@ -174,11 +177,11 @@ struct FetchPageTool: ToolImplementation {
 			guard let httpResponse = response as? HTTPURLResponse else {
 				throw ContentError.contentError(message: "Invalid response from server")
 			}
-			
+
 			guard (200...299).contains(httpResponse.statusCode) else {
 				throw ContentError.contentError(message: "HTTP \(httpResponse.statusCode): Failed to fetch page")
 			}
-			
+
 			// Convert to string
 			guard let html = String(data: data, encoding: .utf8) else {
 				throw ContentError.contentError(message: "Failed to decode HTML content")
@@ -187,7 +190,7 @@ struct FetchPageTool: ToolImplementation {
 			let parseTimeStart = Date()
 			// Parse HTML
 			let document = try SwiftSoup.parse(html)
-			
+
 			// Extract text content (removes all HTML tags, scripts, styles)
 			let fullText = try document.text()
 			let totalLength = fullText.count
@@ -222,14 +225,14 @@ struct FetchPageTool: ToolImplementation {
 					} else {
 						absoluteURL = URL(string: href, relativeTo: url)?.absoluteURL
 					}
-				
+
 					guard let finalURL = absoluteURL else { return nil }
-					
+
 					// Filter by same-site if requested
 					if sameSiteLinksOnly {
 						guard finalURL.host == url.host else { return nil }
 					}
-				
+
 					return Link(
 						text: linkText,
 						url: finalURL,
@@ -270,7 +273,7 @@ struct FetchPageTool: ToolImplementation {
 	}
 
 	// MARK: - Fetch Mode
-	
+
 	private func performFetch(
 		fullText: String,
 		title: String?,
@@ -283,10 +286,10 @@ struct FetchPageTool: ToolImplementation {
 		let startIndex = fullText.index(fullText.startIndex, offsetBy: min(offset, totalLength), limitedBy: fullText.endIndex) ?? fullText.endIndex
 		let endOffset = min(offset + limit, totalLength)
 		let endIndex = fullText.index(fullText.startIndex, offsetBy: endOffset, limitedBy: fullText.endIndex) ?? fullText.endIndex
-		
+
 		let contentSlice = String(fullText[startIndex..<endIndex])
 		let hasMore = endOffset < totalLength
-		
+
 		struct PageContent: Codable, Sendable {
 			let text: String
 			let title: String?
@@ -320,13 +323,13 @@ struct FetchPageTool: ToolImplementation {
 				cacheAge: statsForward.cacheAge,
 				cacheTTL: statsForward.cacheTTL,
 				searchTime: nil))
-		
+
 		let output = StructuredContentOutput(
 			inputRequest: "fetch-page: \(url.absoluteString) (offset: \(offset), limit: \(limit))",
 			metaData: nil,
 			content: [pageContent]
 		)
-		
+
 		return output.toResult()
 	}
 }

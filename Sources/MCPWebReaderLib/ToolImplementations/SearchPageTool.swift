@@ -1,6 +1,9 @@
 import MCP
 import Foundation
 import SwiftSoup
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 extension ToolCommand {
 	static let searchPage = ToolCommand(rawValue: "search-page")
@@ -20,7 +23,7 @@ extension ToolCommand {
 /// - Supports JavaScript rendering for dynamic content
 struct SearchPageTool: ToolImplementation {
 	static let command: ToolCommand = .searchPage
-	
+
 	static let tool = Tool(
 		name: command.rawValue,
 		description: "Search for text within a web page and return all match positions with context. Use this to find specific information on a page, then use fetch-page with the returned positions to retrieve full content. Shares cache with fetch-page for efficiency. Use `renderJS: true` for JavaScript-heavy sites.",
@@ -71,7 +74,7 @@ struct SearchPageTool: ToolImplementation {
 			"required": .array([.string("url"), .string("query")])
 		])
 	)
-	
+
 	// Typed properties
 	let url: URL
 	let query: String
@@ -83,31 +86,31 @@ struct SearchPageTool: ToolImplementation {
 	let includeMetadata: Bool
 	let includeLinks: Bool
 	let sameSiteLinksOnly: Bool
-	
+
 	private let engine: WebPageEngine
-	
+
 	/// Initialize and validate parameters
 	init(arguments: CallTool.Parameters, engine: WebPageEngine) throws(ContentError) {
 		self.engine = engine
-		
+
 		// Extract and validate URL
 		guard let urlString = arguments.strings.url else {
 			throw .missingArgument("url")
 		}
-		
+
 		guard let url = URL(string: urlString),
 			  let scheme = url.scheme,
 			  ["http", "https"].contains(scheme) else {
 			throw .contentError(message: "Invalid URL. Must be a valid http:// or https:// URL")
 		}
-		
+
 		self.url = url
-		
+
 		// Extract and validate query
 		guard let query = arguments.strings.query, !query.isEmpty else {
 			throw .missingArgument("query")
 		}
-		
+
 		self.query = query
 		self.renderJS = arguments.bools.renderJS ?? false
 		self.httpMethod = arguments.strings.httpMethod ?? "GET"
@@ -116,7 +119,7 @@ struct SearchPageTool: ToolImplementation {
 		self.includeMetadata = arguments.bools.includeMetadata ?? true
 		self.includeLinks = arguments.bools.includeLinks ?? false
 		self.sameSiteLinksOnly = arguments.bools.sameSiteLinksOnly ?? true
-		
+
 		// Extract custom headers if provided
 		if let headersDict = arguments.arguments?["customHeaders"]?.objectValue {
 			var headers: [String: String] = [:]
@@ -129,7 +132,7 @@ struct SearchPageTool: ToolImplementation {
 			self.customHeaders = [:]
 		}
 	}
-	
+
 	private struct StatsForward {
 		let startTime: Date
 		let networkFetchTime: TimeInterval
@@ -138,12 +141,12 @@ struct SearchPageTool: ToolImplementation {
 		let cacheAge: TimeInterval?
 		let cacheTTL: TimeInterval?
 	}
-	
+
 	/// Execute the tool
 	func callAsFunction() async throws(ContentError) -> CallTool.Result {
 		do {
 			let startTime = Date()
-			
+
 			// Fetch the page (with caching)
 			let cacheResponse = try await engine.fetch(
 				url: url,
@@ -155,31 +158,31 @@ struct SearchPageTool: ToolImplementation {
 			)
 			let data = cacheResponse.data
 			let response = cacheResponse.response
-			
+
 			let networkFetchTime = Date()
-			
+
 			// Validate HTTP response
 			guard let httpResponse = response as? HTTPURLResponse else {
 				throw ContentError.contentError(message: "Invalid response from server")
 			}
-			
+
 			guard (200...299).contains(httpResponse.statusCode) else {
 				throw ContentError.contentError(message: "HTTP \(httpResponse.statusCode): Failed to fetch page")
 			}
-			
+
 			// Convert to string
 			guard let html = String(data: data, encoding: .utf8) else {
 				throw ContentError.contentError(message: "Failed to decode HTML content")
 			}
-			
+
 			let parseTimeStart = Date()
 			// Parse HTML
 			let document = try SwiftSoup.parse(html)
-			
+
 			// Extract text content
 			let fullText = try document.text()
 			let totalLength = fullText.count
-			
+
 			// Extract links if requested
 			let links: [Link]
 			if includeLinks {
@@ -196,14 +199,14 @@ struct SearchPageTool: ToolImplementation {
 							existingLinks.contains(href) == false
 						else { return nil }
 						existingLinks.insert(href)
-						
+
 						// Get context from surrounding text
 						let previous = try? link.previousElementSibling()
 						let next = try? link.nextElementSibling()
-						
+
 						let contextBefore = (try? previous?.text())?.suffix(50)
 						let contextAfter = (try? next?.text())?.prefix(50)
-						
+
 						// Resolve relative URLs
 						let absoluteURL: URL?
 						if let absHref = try? link.attr("abs:href"), !absHref.isEmpty {
@@ -211,14 +214,14 @@ struct SearchPageTool: ToolImplementation {
 						} else {
 							absoluteURL = URL(string: href, relativeTo: url)?.absoluteURL
 						}
-						
+
 						guard let finalURL = absoluteURL else { return nil }
-					
+
 						// Filter by same-site if requested
 						if sameSiteLinksOnly {
 							guard finalURL.host == url.host else { return nil }
 						}
-						
+
 						return Link(
 							text: linkText,
 							url: finalURL,
@@ -228,13 +231,13 @@ struct SearchPageTool: ToolImplementation {
 			} else {
 				links = []
 			}
-			
+
 			// Extract metadata if requested
 			let title: String? = includeMetadata ? (try? document.title()) : nil
 			let description: String? = includeMetadata ? (try? document.select("meta[name=description]").first()?.attr("content")) : nil
-			
+
 			let parseTimeEnd = Date()
-			
+
 			let statsForward = StatsForward(
 				startTime: startTime,
 				networkFetchTime: networkFetchTime.timeIntervalSince(startTime),
@@ -242,7 +245,7 @@ struct SearchPageTool: ToolImplementation {
 				cacheHit: cacheResponse.cacheHit,
 				cacheAge: cacheResponse.cacheAge,
 				cacheTTL: cacheResponse.cacheTTL)
-			
+
 			// Perform search
 			return try performSearch(
 				fullText: fullText,
@@ -257,9 +260,9 @@ struct SearchPageTool: ToolImplementation {
 			throw ContentError.other(error)
 		}
 	}
-	
+
 	// MARK: - Search Implementation
-	
+
 	private func performSearch(
 		fullText: String,
 		title: String?,
@@ -272,7 +275,7 @@ struct SearchPageTool: ToolImplementation {
 			let position: Int
 			let context: String
 		}
-		
+
 		struct SearchResult: Codable, Sendable {
 			let query: String
 			let matches: [SearchMatch]
@@ -284,49 +287,49 @@ struct SearchPageTool: ToolImplementation {
 			let links: [Link]
 			let statistics: FetchStatistics
 		}
-		
+
 		let searchStart = Date()
-		
+
 		var matches: [SearchMatch] = []
 		let contextRadius = 100 // Characters before/after match to include
-		
+
 		// Case-insensitive search
 		let lowercasedText = fullText.lowercased()
 		let lowercasedQuery = query.lowercased()
-		
+
 		var searchRange = lowercasedText.startIndex..<lowercasedText.endIndex
-		
+
 		while let range = lowercasedText.range(of: lowercasedQuery, range: searchRange) {
 			let position = lowercasedText.distance(from: lowercasedText.startIndex, to: range.lowerBound)
-			
+
 			// Calculate context window
 			let contextStart = fullText.index(
 				range.lowerBound,
 				offsetBy: -contextRadius,
 				limitedBy: fullText.startIndex
 			) ?? fullText.startIndex
-			
+
 			let contextEnd = fullText.index(
 				range.upperBound,
 				offsetBy: contextRadius,
 				limitedBy: fullText.endIndex
 			) ?? fullText.endIndex
-			
+
 			let contextText = String(fullText[contextStart..<contextEnd])
 			let prefix = contextStart != fullText.startIndex ? "..." : ""
 			let suffix = contextEnd != fullText.endIndex ? "..." : ""
-			
+
 			matches.append(SearchMatch(
 				position: position,
 				context: "\(prefix)\(contextText)\(suffix)"
 			))
-			
+
 			// Move search range past this match
 			searchRange = range.upperBound..<lowercasedText.endIndex
 		}
-		
+
 		let searchEnd = Date()
-		
+
 		let searchResult = SearchResult(
 			query: query,
 			matches: matches,
@@ -344,13 +347,13 @@ struct SearchPageTool: ToolImplementation {
 				cacheAge: statsForward.cacheAge,
 				cacheTTL: statsForward.cacheTTL,
 				searchTime: searchEnd.timeIntervalSince(searchStart)))
-		
+
 		let output = StructuredContentOutput(
 			inputRequest: "search-page: \(url.absoluteString) (query: \"\(query)\")",
 			metaData: nil,
 			content: [searchResult]
 		)
-		
+
 		return output.toResult()
 	}
 }
