@@ -75,7 +75,8 @@ actor WebPageEngine {
 			#if canImport(WebKit)
 			responseAndData = try await loadJSRenderedPage(urlRequest: request)
 			#else
-			throw FetchError.jsRenderingNotSupportedOnThisSystem
+			let renderer = LinuxJSRenderer()
+			responseAndData = try await renderer.render(urlRequest: request, timeoutSeconds: 45)
 			#endif
 		} else {
 			responseAndData = try await URLSession.shared.data(for: request)
@@ -95,12 +96,6 @@ actor WebPageEngine {
 			cacheAge: nil,
 			cacheTTL: cacheDuration)
 	}
-
-	#if !canImport(WebKit)
-	public enum FetchError: Error {
-		case jsRenderingNotSupportedOnThisSystem
-	}
-	#endif
 
 	#if canImport(WebKit)
 	@MainActor
