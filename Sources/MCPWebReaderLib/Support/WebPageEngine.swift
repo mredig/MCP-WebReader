@@ -1,11 +1,11 @@
 import Crypto
 import Foundation
 import SwiftPizzaSnips
-import WebReaderLinuxCompat
 #if canImport(WebKit)
 import WebKit
 #endif
 #if canImport(FoundationNetworking)
+import WebReaderLinuxCompat
 import FoundationNetworking
 #endif
 
