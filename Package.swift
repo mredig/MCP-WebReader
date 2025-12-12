@@ -32,7 +32,7 @@ let package = Package(
 		.package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
     ],
     targets: [
-	    .target(name: "WebReaderLinuxCompat"),
+	    .target(name: "WebReaderLinuxCompat", dependencies: ["SwiftPizzaSnips"]),
 		.target(
 			name: "MCPWebReaderLib",
 			dependencies: [
