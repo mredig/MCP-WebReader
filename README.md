@@ -4,12 +4,42 @@ A Swift MCP (Model Context Protocol) server for fetching and parsing web content
 
 ## TLDR - Quick Start
 
+**Install via Homebrew:** (macos only)
+Use brew to get the [pizza tool package](https://github.com/mredig/homebrew-pizza-mcp-tools), containing this (and other tools).
+
+```bash
+brew tap mredig/pizza-mcp-tools
+brew update
+brew install mcp-webreader
+```
+
+**Or build from source:**
 ```bash
 # Clone and build
 git clone <your-repo-url>
 cd MCP-WebReader
 swift build
+```
 
+**Add to Zed settings** (`~/.config/zed/settings.json`): (recommended)
+
+(In Zed, `Add Custom Server` and provide the following snippet)
+```json
+{
+  /// The name of your MCP server
+  "webreader": {
+    /// The command which runs the MCP server
+    "command": "mcp-webreader", // if building yourself, you'll need to provide the whole path
+    /// The arguments to pass to the MCP server
+    "args": [],
+    /// The environment variables to set
+    "env": {}
+  }
+}
+```
+
+**or Claude**
+```json
 # Add to Claude Desktop config at:
 # ~/Library/Application Support/Claude/claude_desktop_config.json
 {
@@ -19,8 +49,6 @@ swift build
     }
   }
 }
-
-# Restart Claude Desktop - you're done!
 ```
 
 ## Adding Your Own Tools
