@@ -16,28 +16,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # - name: Set up Swift
-      #   uses: swift-actions/setup-swift@v2
-      #   with:
-      #     swift-version: '6.0'
-
-      - name: Build arm64 binary
+      - name: Build universal binary
         run: |
-          xcodebuild -scheme MCP-WebReader -configuration Release -destination 'platform=macOS,arch=arm64'
+          xcodebuild -scheme MCP-WebReader -configuration Release -destination 'platform=macOS' ONLY_ACTIVE_ARCH=NO
           DERIVED_DATA=$(find ~/Library/Developer/Xcode/DerivedData -name "MCP-WebReader-*" -type d -maxdepth 1 | head -1)
-          cp "$DERIVED_DATA/Build/Products/Release/mcp-webreader" /tmp/mcp-webreader-arm64
-
-      - name: Build x86_64 binary
-        run: |
-          xcodebuild -scheme MCP-WebReader -configuration Release -destination 'platform=macOS,arch=x86_64'
-          DERIVED_DATA=$(find ~/Library/Developer/Xcode/DerivedData -name "MCP-WebReader-*" -type d -maxdepth 1 | head -1)
-          cp "$DERIVED_DATA/Build/Products/Release/mcp-webreader" /tmp/mcp-webreader-x86_64
-
-      - name: Create universal binary
-        run: |
-          lipo -create /tmp/mcp-webreader-arm64 /tmp/mcp-webreader-x86_64 -output /tmp/mcp-webreader
           mkdir -p ./build
-          cp /tmp/mcp-webreader ./build/mcp-webreader
+          cp "$DERIVED_DATA/Build/Products/Release/mcp-webreader" ./build/mcp-webreader
 
       - name: Create tarball and SHA256
         run: |
