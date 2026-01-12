@@ -27,7 +27,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", "1.0.0" ..< "5.0.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.6.2"),
-		.package(url: "https://github.com/mredig/SwiftPizzaSnips.git", branch: "0.4.38h"),
+		.package(url: "https://github.com/mredig/SwiftPizzaSnips.git", from: "0.5.0"),
 		// HTML Parsing
 		.package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
     ],
